@@ -123,6 +123,10 @@ func (s *Simulation) AdvanceFrame() error {
                 if(act.Typ == core.ActionAttack || act.Typ == core.ActionCharge) {
                     custom = 0
                 }
+            } else if(s.C.LastAction.Typ == core.ActionSwap) {
+                if(act.Typ == core.ActionBurst) {
+                    custom -= 5;
+                }
             }
             delay = s.C.AnimationCancelDelay(act.Typ, act.Param) + custom
 		}
