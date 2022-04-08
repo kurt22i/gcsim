@@ -14,6 +14,7 @@ type Tmpl struct {
 	HPMax       float64
 	Hitbox      core.Circle
 	Res         map[core.EleType]float64
+	Freeze      int
 	Level       int
 	Tags        map[string]int
 

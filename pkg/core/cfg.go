@@ -127,6 +127,7 @@ type EnemyProfile struct {
 	Level          int                 `json:"level"`
 	HP             float64             `json:"-"`
 	Resist         map[EleType]float64 `json:"-"`
+	Freeze         float64             `json:"-"`
 	Size           float64             `json:"-"`
 	CoordX, CoordY float64             `json:"-"`
 }
@@ -135,6 +136,7 @@ func (e *EnemyProfile) Clone() EnemyProfile {
 	r := EnemyProfile{
 		Level:  e.Level,
 		Resist: make(map[EleType]float64),
+		Freeze: e.Freeze,
 	}
 	for k, v := range e.Resist {
 		r.Resist[k] = v

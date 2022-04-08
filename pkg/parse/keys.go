@@ -51,7 +51,8 @@ var key = map[string]ItemType{
 	"every":    itemEvery,
 	"ele":      itemEle,
 	// target related
-	"resist": itemResist,
+	"resist":    itemResist,
+	"freezable": itemFreeze,
 }
 
 var queueModeKeys = map[string]core.SimulationQueueMode{

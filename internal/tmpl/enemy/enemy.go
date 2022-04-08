@@ -17,6 +17,7 @@ func New(index int, c *core.Core, p core.EnemyProfile) *Enemy {
 	e.TargetIndex = index
 	e.Level = p.Level
 	e.Res = p.Resist
+	e.Freeze = int(p.Freeze)
 	e.Core = c
 	e.HPMax = p.HP
 	e.HPCurrent = p.HP

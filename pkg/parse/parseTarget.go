@@ -61,6 +61,17 @@ func parseTarget(p *Parser) (parseFn, error) {
 			}
 
 			r.Resist[eleKeys[s]] += amt
+		case itemFreeze:
+			item, err := p.acceptSeqReturnLast(itemEqual, itemNumber)
+			if err != nil {
+				return nil, err
+			}
+			n, err := itemNumberToFloat64(item)
+			if err != nil {
+				return nil, err
+			}
+
+			r.Freeze = n
 		case itemTerminateLine:
 			p.cfg.Targets = append(p.cfg.Targets, r)
 			return parseRows, nil

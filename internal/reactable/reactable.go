@@ -18,7 +18,7 @@ type Reactable struct {
 }
 
 const frzDelta core.Durability = 2.5 / (60 * 60) // 2 * 1.25
-const frzDecayCap core.Durability = 10.0 / 60.0
+const frzDecayCap core.Durability = 1000.0
 
 const ZeroDur core.Durability = 0.00000000001
 

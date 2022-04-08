@@ -122,6 +122,7 @@ const (
 	// these are related to target setting
 
 	itemResist
+	itemFreeze
 
 	// stat types after the rest
 
