@@ -89,7 +89,7 @@ func (c *char) Skill(p map[string]int) (int, int) {
 
 	switch p["hold"] {
 	case 1:
-		c.skillHoldShort()
+		c.skillHoldShort(false)
 		cd = 450 - 90
 		cdDelay = 43
 	case 2:
