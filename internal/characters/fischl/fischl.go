@@ -6,7 +6,7 @@ import (
 	"github.com/genshinsim/gcsim/internal/tmpl/character"
 	"github.com/genshinsim/gcsim/pkg/core"
 )
-
+lalalalallalalalalashjdkgahergiur4h
 func init() {
 	core.RegisterCharFunc(core.Fischl, NewChar)
 }
