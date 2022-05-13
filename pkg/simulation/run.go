@@ -136,7 +136,7 @@ func (s *Simulation) AdvanceFrame() error {
 			}
 
 			//other wise we can add delay
-			if delay > 0 {
+			if delay > 0 && s.lastDelayAt < s.lastActionUsedAt {
 				s.C.Log.NewEvent(
 					"animation delay triggered",
 					core.LogActionEvent,
@@ -146,6 +146,7 @@ func (s *Simulation) AdvanceFrame() error {
 					"default_delays", s.C.Flags.Delays,
 				)
 				s.skip = delay - 1
+				s.lastDelayAt = s.C.F
 				return nil
 			}
 		}
@@ -153,7 +154,10 @@ func (s *Simulation) AdvanceFrame() error {
 		s.skip, done, err = s.C.Action.Exec(s.queue[0])
 		//fmt.Printf("%v,%v", s.skip, done)
 		//last action used should then be current frame + how much we are skipping (i.e. first frame queueable)
-		s.lastActionUsedAt = s.C.F + s.skip
+		//if skip is 0, the action either failed or was invalid.
+		if s.skip > 0 {
+			s.lastActionUsedAt = s.C.F + s.skip
+		}
 		if err != nil {
 			return err
 		}
