@@ -1,6 +1,9 @@
 package simulation
 
 import (
+	"math"
+	"math/rand"
+
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
@@ -126,7 +129,7 @@ func (s *Simulation) AdvanceFrame() error {
 		delay = s.C.AnimationCancelDelay(act.Typ, act.Param) + s.C.UserCustomDelay()
 		//check if we should delay
 
-		rdelay := s.C.Rand.Intn(3)
+		rdelay := quantile()
 		if s.C.LastAction.Typ == core.ActionAttack {
 			if act.Typ == core.ActionAttack || act.Typ == core.ActionCharge {
 				rdelay = 0
@@ -220,4 +223,9 @@ func (s *Simulation) handleHurt() {
 		s.C.Log.NewEvent("hurt queued", core.LogSimEvent, -1, "last", s.lastHurt, "cfg", s.cfg.Hurt, "amt", amt, "hurt_frame", s.C.F+f)
 		// s.C.Log.Debugw("hurt queued", "frame", s.C.F, core.LogSimEvent, "last", s.lastHurt, "cfg", s.cfg.Hurt, "amt", amt, "hurt_frame", s.C.F+f)
 	}
+}
+
+func quantile() int {
+	r := rand.Float64()
+	return int(math.Round(2.4 * math.Tan(math.Pi*((r+1.0)/2.05-0.5))))
 }
