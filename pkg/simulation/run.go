@@ -126,13 +126,29 @@ func (s *Simulation) AdvanceFrame() error {
 		delay = s.C.AnimationCancelDelay(act.Typ, act.Param) + s.C.UserCustomDelay()
 		//check if we should delay
 
-		//so if current frame - when the last action is used is > delay, then we shouldn't
-		//delay at all
-		if s.C.F-s.lastActionUsedAt > delay {
-			delay = 0
+		rdelay := s.C.Rand.Intn(3)
+		if s.C.LastAction.Typ == core.ActionAttack {
+			if act.Typ == core.ActionAttack || act.Typ == core.ActionCharge {
+				rdelay = 0
+			}
+		} else if s.C.LastAction.Typ == core.ActionSwap {
+			if act.Typ == core.ActionBurst {
+				rdelay = 0
+			}
+		}
+		delay += rdelay
+
+		if act.Typ == core.ActionSwap {
+			delay += s.C.Flags.Delays.Swap
 		}
 
-		//other wise we can add delay
+		//so if current frame - when the last action is used is > delay, then we shouldn't
+		//delay at all
+		/*if s.C.F-s.lastActionUsedAt > delay {
+			delay = 0
+		}*/
+
+		//otherwise we can add delay
 		if delay > 0 && s.lastDelayAt < s.lastActionUsedAt {
 			s.C.Log.NewEvent(
 				"animation delay triggered",
