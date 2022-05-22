@@ -174,7 +174,7 @@ func (c *char) skillPress() {
 	if c.Core.Rand.Float64() < .25 {
 		count++
 	}
-	c.QueueParticle("bennett", count, core.Pyro, 120)
+	c.QueueParticle("bennett", count, core.Pyro, 109)
 }
 
 func (c *char) skillHoldShort(c4Active bool) {
