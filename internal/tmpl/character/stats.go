@@ -256,7 +256,7 @@ func (c *Tmpl) MaxHP() float64 {
 func (c *Tmpl) ModifyHP(amt float64) {
 	c.HPCurrent += amt
 	if c.HPCurrent < 0 {
-		c.HPCurrent = -1
+		c.HPCurrent = 1
 	}
 	maxhp := c.MaxHP()
 	if c.HPCurrent > maxhp {
