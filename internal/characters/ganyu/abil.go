@@ -2,6 +2,7 @@ package ganyu
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/genshinsim/gcsim/pkg/core"
 )
@@ -43,7 +44,7 @@ func (c *char) Aimed(p map[string]int) (int, int) {
 	if !ok {
 		bloom = 24
 	}
-	weakspot, ok := p["weakspot"]
+	weakspot := rand.Intn(2)
 
 	ai := core.AttackInfo{
 		ActorIndex:   c.Index,

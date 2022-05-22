@@ -2,6 +2,7 @@ package beidou
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/genshinsim/gcsim/internal/tmpl/shield"
 	"github.com/genshinsim/gcsim/pkg/core"
@@ -29,7 +30,7 @@ func (c *char) Attack(p map[string]int) (int, int) {
 }
 
 func (c *char) Skill(p map[string]int) (int, int) {
-	counter := p["counter"]
+	counter := 2 * rand.Intn(2)
 	f, a := c.ActionFrames(core.ActionSkill, p)
 	//0 for base dmg, 1 for 1x bonus, 2 for max bonus
 	if counter >= 2 {
