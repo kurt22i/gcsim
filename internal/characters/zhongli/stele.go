@@ -1,6 +1,8 @@
 package zhongli
 
 import (
+	"math/rand"
+
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
@@ -84,9 +86,11 @@ func (c *char) resonance(src, max int) func() {
 		}
 		orb := false
 		for i := 0; i < count; i++ {
-			c.Core.Combat.QueueAttackEvent(&ae, 0)
-			if c.energyICD < c.Core.F && !orb && c.Core.Rand.Float64() < .5 {
-				orb = true
+			if count > 1 || rand.Intn(2) == 0 {
+				c.Core.Combat.QueueAttackEvent(&ae, 0)
+				if c.energyICD < c.Core.F && !orb && c.Core.Rand.Float64() < .5 {
+					orb = true
+				}
 			}
 		}
 		if orb {
