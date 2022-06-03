@@ -47,6 +47,13 @@ func (c *char) Init() {
 	c.Tmpl.Init()
 	c.InitCancelFrames()
 
+	return &c, nil
+}
+
+func (c *char) Init() {
+	c.Tmpl.Init()
+	c.InitCancelFrames()
+
 	c.ppHook()
 	c.onExitField()
 	c.a4()
