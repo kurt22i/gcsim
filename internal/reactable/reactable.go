@@ -27,7 +27,18 @@ func (r *Reactable) Init(self core.Target, c *core.Core) *Reactable {
 	r.core = c
 	r.Durability = make([]core.Durability, core.ElementDelimAttachable)
 	r.DecayRate = make([]core.Durability, core.ElementDelimAttachable)
-	r.DecayRate[core.Frozen] = frzDecayCap
+	//count targets to set ST unfreezable
+	targets := 0
+	for _, t := range c.Targets {
+		if t.Type() == core.TargettableEnemy {
+			targets++
+		}
+	}
+	if targets <= 1 {
+		r.DecayRate[core.Frozen] = 10000.0
+	} else {
+		r.DecayRate[core.Frozen] = frzDecayCap
+	}
 	r.ecTickSrc = -1
 	return r
 }

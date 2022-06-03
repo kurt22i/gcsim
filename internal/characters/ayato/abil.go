@@ -136,7 +136,18 @@ func (c *char) Burst(p map[string]int) (int, int) {
 
 	rad, ok := p["radius"]
 	if !ok {
-		rad = 1
+		//count targets
+		targets := 0
+		for _, t := range c.Core.Targets {
+			if t.Type() == core.TargettableEnemy {
+				targets++
+			}
+		}
+		if targets <= 1 {
+			rad = 2
+		} else {
+			rad = 1
+		}
 	}
 
 	r := 2.5 + float64(rad)
