@@ -36,17 +36,19 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	c.NormalHitNum = 5
 
 	c.icicleICD = make([]int, 4)
-	// c.burstICD()
+
+	return &c, nil
+}
+
+func (c *char) Init() {
+	c.Tmpl.Init()
 
 	if c.Base.Cons > 0 {
 		c.c1()
 	}
-
 	if c.Base.Cons >= 4 {
 		c.c4()
 	}
-
-	return &c, nil
 }
 
 func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
@@ -121,7 +123,13 @@ func (c *char) Skill(p map[string]int) (int, int) {
 	a4count := 0
 	cb := func(a core.AttackCB) {
 		heal := .15 * (a.AttackEvent.Snapshot.BaseAtk*(1+a.AttackEvent.Snapshot.Stats[core.ATKP]) + a.AttackEvent.Snapshot.Stats[core.ATK])
-		c.Core.Health.HealActive(c.Index, heal)
+		c.Core.Health.Heal(core.HealInfo{
+			Caller:  c.Index,
+			Target:  c.Core.ActiveChar,
+			Message: "Cold-Blooded Strike",
+			Src:     heal,
+			Bonus:   c.Stat(core.Heal),
+		})
 		//if target is frozen after hit then drop additional energy;
 		if a4count == 2 {
 			return
@@ -129,7 +137,7 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		if a.Target.AuraContains(core.Frozen) {
 			a4count++
 			c.QueueParticle("kaeya", 1, core.Cryo, 100)
-			c.Core.Log.NewEvent("kaeya a4 proc", core.LogEnergyEvent, c.Index)
+			c.Core.Log.NewEvent("kaeya a4 proc", core.LogCharacterEvent, c.Index)
 		}
 	}
 	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 28, cb)

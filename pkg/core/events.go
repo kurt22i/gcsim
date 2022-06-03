@@ -33,11 +33,10 @@ const (
 	OnStamUse          //abil
 	OnShielded         //shield
 	OnCharacterSwap    //prev, next
-	OnDash             //nil
 	OnParticleReceived //particle
 	OnEnergyChange     //character_received, pre_energy, energy_change, src (post-energy available in character_received)
 	OnTargetDied       //target
-	OnCharacterHurt    //nil
+	OnCharacterHurt    //amount
 	OnHeal             //src char, target character, amount
 	//ability use
 	PreSkill         //nil
@@ -54,6 +53,8 @@ const (
 	PostAimShoot     //nil, frames
 	PreDash
 	PostDash
+	PreJump
+	PostJump
 	//sim stuff
 	OnInitialize  //nil
 	OnStateChange //prev, next

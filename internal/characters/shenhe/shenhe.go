@@ -16,16 +16,6 @@ type char struct {
 	quillcount []int
 	c4count    int
 	c4expiry   int
-
-	// eChargeMax       int
-	// eCharges         int
-	// skillRecoverySrc int
-	// recoverQueue     []int //queue of recovery
-
-	cdQueueWorkerStartedAt []int
-	cdQueue                [][]int
-	availableCDCharge      []int
-	additionalCDCharge     []int
 }
 
 const (
@@ -56,20 +46,20 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	c.c4count = 0
 	c.c4expiry = 0
 
-	c.cdQueueWorkerStartedAt = make([]int, core.EndActionType)
-	c.cdQueue = make([][]int, core.EndActionType)
-	c.additionalCDCharge = make([]int, core.EndActionType)
-	c.availableCDCharge = make([]int, core.EndActionType)
-
-	for i := 0; i < len(c.cdQueue); i++ {
-		c.cdQueue[i] = make([]int, 0, 4)
-		c.availableCDCharge[i] = 1
-	}
-
 	if c.Base.Cons >= 1 {
-		c.additionalCDCharge[core.ActionSkill] = 1
-		c.availableCDCharge[core.ActionSkill]++
+		c.SetNumCharges(core.ActionSkill, 2)
 	}
+
+	return &c, nil
+}
+
+func (c *char) Init() {
+	c.Tmpl.Init()
+
+	c.quillcount = make([]int, len(c.Core.Chars))
+
+	c.a1()
+	c.quillDamageMod()
 
 	if c.Base.Cons >= 4 {
 		c.c4()
@@ -77,19 +67,6 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	if c.Base.Cons >= 6 {
 		c.c6()
 	}
-
-	c.quillDamageMod()
-
-	return &c, nil
-}
-
-func (c *char) Init() {
-	c.Tmpl.Init()
-	// if c.Base.Cons >= 6 {
-	// 	c.c6()
-	// }
-	c.a2()
-	c.quillcount = make([]int, len(c.Core.Chars))
 }
 
 // Helper function to update tags that can be used in configs
@@ -116,7 +93,7 @@ func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
 
 // inspired from barbara c2
 // TODO: technically always assumes you are inside shenhe burst
-func (c *char) a2() {
+func (c *char) a1() {
 	val := make([]float64, core.EndStatType)
 	val[core.CryoP] = 0.15
 	for _, char := range c.Core.Chars {
@@ -124,7 +101,7 @@ func (c *char) a2() {
 		// 	continue
 		// }
 		char.AddMod(core.CharStatMod{
-			Key:    "shenhe-a2",
+			Key:    "shenhe-a1",
 			Expiry: -1,
 			Amount: func() ([]float64, bool) {
 				if c.Core.Status.Duration("shenheburst") > 0 {

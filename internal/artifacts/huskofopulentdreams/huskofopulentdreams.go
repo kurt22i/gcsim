@@ -42,13 +42,18 @@ func New(c core.Character, s *core.Core, count int, params map[string]int) {
 
 		// Helper function to check for stack loss
 		// called after every stack gain
-		checkStackLoss := func() {
-			if (lastStackGain + 360) >= s.F {
+		var checkStackLoss func()
+		checkStackLoss = func() {
+			if (lastStackGain + 360) > s.F {
 				return
 			}
 			stacks--
 			s.Log.NewEvent("Husk lost stack", core.LogArtifactEvent, c.CharIndex(), "stacks", stacks, "last_swap", lastSwap, "last_stack_change", lastStackGain)
 
+			// queue up again if we still have stacks
+			if stacks > 0 {
+				c.AddTask(checkStackLoss, "husk-4pc-stack-loss-check", 360)
+			}
 		}
 
 		var gainStackOfffield func(src int) func()
@@ -83,7 +88,7 @@ func New(c core.Character, s *core.Core, count int, params map[string]int) {
 				c.AddTask(gainStackOfffield(s.F), "husk-4pc-off-field-gain", 1)
 			}
 			return true
-		}, "husk-4pc-off-field-stack-init")
+		}, fmt.Sprintf("husk-4pc-off-field-stack-init-%v", c.Name()))
 
 		s.Events.Subscribe(core.OnCharacterSwap, func(args ...interface{}) bool {
 			prev := args[0].(int)
@@ -93,7 +98,7 @@ func New(c core.Character, s *core.Core, count int, params map[string]int) {
 			lastSwap = s.F
 			c.AddTask(gainStackOfffield(s.F), "husk-4pc-off-field-gain", 180)
 			return false
-		}, "husk-4pc-off-field-gain")
+		}, fmt.Sprintf("husk-4pc-off-field-gain-%v", c.Name()))
 
 		s.Events.Subscribe(core.OnDamage, func(args ...interface{}) bool {
 			atk := args[1].(*core.AttackEvent)

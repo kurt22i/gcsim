@@ -37,10 +37,12 @@ type Character interface {
 	Skill(p map[string]int) (int, int)
 	Burst(p map[string]int) (int, int)
 	Dash(p map[string]int) (int, int)
+	Jump(p map[string]int) (int, int)
 
 	//info methods
 	ActionReady(a ActionType, p map[string]int) bool
 	ActionStam(a ActionType, p map[string]int) float64
+	Charges(ActionType) int
 
 	//number of frames this action will take
 	// ActionFrames(a ActionType, p map[string]int) int
@@ -78,6 +80,7 @@ type Character interface {
 	Snapshot(a *AttackInfo) Snapshot
 	PreDamageSnapshotAdjust(*AttackEvent, Target) []interface{}
 	ResetNormalCounter()
+	NextNormalCounter() int
 }
 
 type ZoneType int
@@ -94,12 +97,14 @@ type CharStatMod struct {
 	Amount        func() ([]float64, bool) // Returns an array containing the stats boost and whether mod applies
 	ConditionTags []AttackTag
 	Expiry        int
+	Event         LogEvent
 }
 
 type PreDamageMod struct {
 	Key    string
 	Amount func(atk *AttackEvent, t Target) ([]float64, bool) // Returns an array containing the stats boost and whether mod applies
 	Expiry int
+	Event  LogEvent
 }
 
 type WeaponInfusion struct {
@@ -125,4 +130,5 @@ type ReactionBonusMod struct {
 	Key    string
 	Amount func(AttackInfo) (float64, bool)
 	Expiry int
+	Event  LogEvent
 }

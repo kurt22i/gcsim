@@ -1,6 +1,9 @@
 package simulation
 
 import (
+	"math"
+	"math/rand"
+
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
@@ -77,7 +80,7 @@ func (s *Simulation) AdvanceFrame() error {
 	s.collectStats()
 	// }
 
-	if s.skip > 0 {
+	if s.skip > 1 {
 		//if in cooldown, do nothing
 		s.skip--
 		return nil
@@ -106,48 +109,50 @@ func (s *Simulation) AdvanceFrame() error {
 		s.queue = append(s.queue, next...)
 	}
 
-	if len(s.queue) > 0 {
+	//here we need to check for delay but only if the next action is an action
+	//i.e. not a wait
 
-		//here we need to check for delay but only if the next action is an action
-		//i.e. not a wait
+	act, isAction := s.queue[0].(*core.ActionItem)
+
+	//we need to check for when the previous action finished "executing"
+	//this is because sometimes the next action isn't queued for a while
+	//so we can end up with a situation where the last action was queued 100 frames ago
+	//and then we're still trying to add more delay on top of 100 frame
+	if isAction {
 		var delay int
-		act, isAction := s.queue[0].(*core.ActionItem)
+		//check if this action is ready
+		char := s.C.Chars[s.C.ActiveChar]
+		if !(char.ActionReady(act.Typ, act.Param)) {
+			s.C.Log.NewEvent("queued action is not ready, should not happen; skipping frame", core.LogSimEvent, -1)
+			return nil
+		}
+		delay = s.C.AnimationCancelDelay(act.Typ, act.Param) + s.C.UserCustomDelay()
+		//check if we should delay
 
-		//we need to check for when the previous action finished "executing"
-		//this is because sometimes the next action isn't queued for a while
-		//so we can end up with a situation where the last action was queued 100 frames ago
-		//and then we're still trying to add more delay on top of 100 frame
-		if isAction {
-			custom := s.C.UserCustomDelay()
-            if(s.C.LastAction.Typ == core.ActionAttack) {
-                if(act.Typ == core.ActionAttack || act.Typ == core.ActionCharge) {
-                    custom = 0
-                }
-            } else if(s.C.LastAction.Typ == core.ActionSwap) {
-                if(act.Typ == core.ActionBurst) {
-                    custom -= 5;
-                }
-            }
-            delay = s.C.AnimationCancelDelay(act.Typ, act.Param) + custom
+		rdelay := quantile()
+		if s.C.LastAction.Typ == core.ActionAttack {
+			if act.Typ == core.ActionAttack || act.Typ == core.ActionCharge {
+				rdelay = 0
+			}
+		} else if s.C.LastAction.Typ == core.ActionSwap {
+			if act.Typ == core.ActionBurst {
+				rdelay = 0
+			}
+		}
+		delay += rdelay
+
+		if act.Typ == core.ActionSwap {
+			delay += s.C.Flags.Delays.Swap
 		}
 
-		//so if current frame - when the last action is used is >= delay, then we shouldn't
+		//so if current frame - when the last action is used is > delay, then we shouldn't
 		//delay at all
-		if s.C.F-s.lastActionUsedAt >= delay {
-			// s.C.Log.NewEvent(
-			// 	"custom delay skipped",
-			// 	core.LogActionEvent,
-			// 	-1,
-			// 	"time_passed_since_last", s.C.F-s.lastActionUsedAt,
-			// 	"total_delay", delay,
-			// 	"param", s.C.LastAction.Param["delay"],
-			// 	"default_delays", s.C.Flags.Delays,
-			// )
+		/*if s.C.F-s.lastActionUsedAt > delay {
 			delay = 0
-		}
+		}*/
 
-		//other wise we can add delay
-		if delay > 0 {
+		//otherwise we can add delay
+		if delay > 0 && s.lastDelayAt < s.lastActionUsedAt {
 			s.C.Log.NewEvent(
 				"animation delay triggered",
 				core.LogActionEvent,
@@ -157,46 +162,45 @@ func (s *Simulation) AdvanceFrame() error {
 				"default_delays", s.C.Flags.Delays,
 			)
 			s.skip = delay
+			s.lastDelayAt = s.C.F
 			return nil
 		}
-
-		// s.C.Log.Debugw("queue check - before exec",
-		// 	"frame", s.C.F,
-		// 	core.LogQueueEvent,
-		// 	"remaining queue", s.queue,
-		// )
-
-		s.skip, done, err = s.C.Action.Exec(s.queue[0])
-		//last action used should then be current frame + how much we are skipping (i.e. first frame queueable)
-		s.lastActionUsedAt = s.C.F + s.skip
-		if err != nil {
-			return err
-		}
-
-		if done {
-			// if s.opts.LogDetails && isAction {
-			if isAction {
-				s.stats.AbilUsageCountByChar[s.C.ActiveChar][act.Typ.String()]++
-			}
-			//pop queue
-			s.queue = s.queue[1:]
-		} else {
-			if s.dropQueueIfFailed {
-				//drop rest of the queue
-				s.queue = s.queue[:0]
-				//reset
-				s.dropQueueIfFailed = false
-			}
-		}
-		// s.C.Log.Debugw("queue check - after exec",
-		// 	"frame", s.C.F,
-		// 	core.LogQueueEvent,
-		// 	"remaining queue", s.queue,
-		// 	"skip", s.skip,
-		// 	"done", done,
-		// 	"dropIfFailed", s.dropQueueIfFailed,
-		// )
 	}
+
+	s.skip, done, err = s.C.Action.Exec(s.queue[0])
+	//last action used should then be current frame + how much we are skipping (i.e. first frame queueable)
+	//if skip is 0, the action either failed or was invalid.
+	if s.skip > 0 {
+		s.lastActionUsedAt = s.C.F + s.skip
+	}
+	if err != nil {
+		return err
+	}
+
+	if done {
+		// if s.opts.LogDetails && isAction {
+		if isAction {
+			s.stats.AbilUsageCountByChar[s.C.ActiveChar][act.Typ.String()]++
+		}
+		//pop queue
+		s.queue = s.queue[1:]
+	} else {
+		if s.dropQueueIfFailed {
+			//drop rest of the queue
+			s.queue = s.queue[:0]
+			//reset
+			s.dropQueueIfFailed = false
+		}
+	}
+	// s.C.Log.Debugw("queue check - after exec",
+	// 	"frame", s.C.F,
+	// 	core.LogQueueEvent,
+	// 	"remaining queue", s.queue,
+	// 	"skip", s.skip,
+	// 	"done", done,
+	// 	"dropIfFailed", s.dropQueueIfFailed,
+	// )
+
 	return nil
 }
 
@@ -219,4 +223,9 @@ func (s *Simulation) handleHurt() {
 		s.C.Log.NewEvent("hurt queued", core.LogSimEvent, -1, "last", s.lastHurt, "cfg", s.cfg.Hurt, "amt", amt, "hurt_frame", s.C.F+f)
 		// s.C.Log.Debugw("hurt queued", "frame", s.C.F, core.LogSimEvent, "last", s.lastHurt, "cfg", s.cfg.Hurt, "amt", amt, "hurt_frame", s.C.F+f)
 	}
+}
+
+func quantile() int {
+	r := rand.Float64()
+	return int(math.Round(2.4 * math.Tan(math.Pi*((r+1.0)/2.05-0.5))))
 }

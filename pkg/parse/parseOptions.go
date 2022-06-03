@@ -8,15 +8,6 @@ import (
 func parseOptions(p *Parser) (parseFn, error) {
 	//option iter=1000 duration=1000 worker=50 debug=true er_calc=true damage_mode=true
 	var err error
-	
-	p.cfg.Settings.Delays.Swap = 12
-	p.cfg.Settings.Delays.Attack = 5
-	p.cfg.Settings.Delays.Charge = 5
-	p.cfg.Settings.Delays.Skill = 5
-	p.cfg.Settings.Delays.Burst = 5
-	p.cfg.Settings.Delays.Dash = 5
-	p.cfg.Settings.Delays.Jump = 5
-	p.cfg.Settings.Delays.Aim = 10
 
 	//options debug=true iteration=5000 duration=90 workers=24;
 	for n := p.next(); n.typ != itemEOF; n = p.next() {
@@ -49,7 +40,7 @@ func parseOptions(p *Parser) (parseFn, error) {
 					//should be either apl or sl
 					m, ok := queueModeKeys[n.val]
 					if !ok {
-						return nil, fmt.Errorf("invalid queue mode, got %v", n.val)
+						return nil, fmt.Errorf("ln%v: invalid queue mode, got %v", n.line, n.val)
 					}
 					p.cfg.Settings.QueueMode = m
 				}
@@ -93,43 +84,32 @@ func parseOptions(p *Parser) (parseFn, error) {
 				if err == nil {
 					p.cfg.Settings.Delays.Aim, err = itemNumberToInt(n)
 				}
-			case "alld":
-				n, err = p.acceptSeqReturnLast(itemEqual, itemNumber)
-				if err == nil {
-					p.cfg.Settings.Delays.Aim, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Dash, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Jump, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Burst, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Skill, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Charge, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Attack, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Swap, err = itemNumberToInt(n)
-					p.cfg.Settings.Delays.Swap += 7
-				}
 			case "frame_defaults":
 				n, err = p.acceptSeqReturnLast(itemEqual, itemIdentifier)
 				if err == nil {
 					switch n.val {
 					case "human":
-						p.cfg.Settings.Delays.Swap = 12
+						p.cfg.Settings.Delays.Swap = 8
 						p.cfg.Settings.Delays.Attack = 5
 						p.cfg.Settings.Delays.Charge = 5
 						p.cfg.Settings.Delays.Skill = 5
 						p.cfg.Settings.Delays.Burst = 5
 						p.cfg.Settings.Delays.Dash = 5
 						p.cfg.Settings.Delays.Jump = 5
-						p.cfg.Settings.Delays.Aim = 10
+						p.cfg.Settings.Delays.Aim = 5
 					default:
-						return nil, fmt.Errorf("unrecognized option for frame_defaults specified: %v", n.val)
+						return nil, fmt.Errorf("ln%v: unrecognized option for frame_defaults specified: %v", n.line, n.val)
 					}
 				}
 			case "er_calc":
 				//does nothing thus far...
 			default:
-				return nil, fmt.Errorf("unrecognized option specified: %v", n.val)
+				return nil, fmt.Errorf("ln%v: unrecognized option specified: %v", n.line, n.val)
 			}
 		case itemTerminateLine:
 			return parseRows, nil
+		default:
+			return nil, fmt.Errorf("ln%v: unrecognized token parsing options: %v", n.line, n)
 		}
 		if err != nil {
 			return nil, err

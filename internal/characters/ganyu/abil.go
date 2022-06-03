@@ -2,6 +2,7 @@ package ganyu
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/genshinsim/gcsim/pkg/core"
 )
@@ -41,9 +42,9 @@ func (c *char) Aimed(p map[string]int) (int, int) {
 	}
 	bloom, ok := p["bloom"]
 	if !ok {
-		bloom = 20
+		bloom = 24
 	}
-	weakspot, ok := p["weakspot"]
+	weakspot := rand.Intn(2)
 
 	ai := core.AttackInfo{
 		ActorIndex:   c.Index,
@@ -58,20 +59,25 @@ func (c *char) Aimed(p map[string]int) (int, int) {
 		HitWeakPoint: weakspot == 1,
 	}
 
-	c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(1, core.TargettableEnemy), f, travel+f)
+	// delay aim shot mostly to handle A1
+	c.AddTask(func() {
+		snap := c.Snapshot(&ai)
+		if c.Core.F < c.a1Expiry {
+			old := snap.Stats[core.CR]
+			snap.Stats[core.CR] += .20
+			c.Core.Log.NewEvent("a1 adding crit rate", core.LogCharacterEvent, c.Index, "old", old, "new", snap.Stats[core.CR], "expiry", c.a1Expiry)
+		}
 
-	ai.Abil = "Frost Flake Bloom"
-	ai.Mult = ffb[c.TalentLvlAttack()]
-	ai.HitWeakPoint = false
+		c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefSingleTarget(1, core.TargettableEnemy), travel)
 
-	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), f, travel+bloom+f)
+		ai.Abil = "Frost Flake Bloom"
+		ai.Mult = ffb[c.TalentLvlAttack()]
+		ai.HitWeakPoint = false
+		c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), travel+bloom)
 
-	// if c.a2expiry > c.Core.F {
-	// 	d.Stats[def.CR] += 0.2
-	// 	c.Core.Log.Debugw("ganyu a2",  "event", def.LogCalc,  "new crit %", d.Stats[def.CR])
-	// }
-
-	c.a2expiry = c.Core.F + 5*60
+		// first shot/bloom do not benefit from a1
+		c.a1Expiry = c.Core.F + 60*5
+	}, "ganyu-aim-snapshot", f)
 
 	return f, a
 }
@@ -93,12 +99,12 @@ func (c *char) Skill(p map[string]int) (int, int) {
 
 	snap := c.Snapshot(&ai)
 	//flower damage immediately
-	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), 30)
+	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), 13)
 	//we get the orbs right away
 	c.QueueParticle("ganyu", 2, core.Cryo, 90)
 
 	//flower damage is after 6 seconds
-	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), 360)
+	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), 373)
 	// TODO: Particle flight time is 60s?
 	c.QueueParticle("ganyu", 2, core.Cryo, 420)
 
@@ -109,30 +115,7 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		c.Core.Status.AddStatus("ganyuc6", 1800)
 	}
 
-	if c.Base.Cons >= 2 {
-		last := c.Tags["last"]
-		//we can only be here if the cooldown is up, meaning at least 1 charge is off cooldown
-		//last should just represent when the next charge starts recharging, this should equal
-		//to right when the first charge is off cooldown
-		if last == -1 {
-			c.Tags["last"] = c.Core.F
-			// c.Core.Log.Infof("\t Sucrose first time using skill, first charge cd up at %v", c.Core.F+900)
-		} else if c.Core.F-last < 600 {
-			//if last is less than 15s in the past, then 1 charge is up
-			//then we move last up to when the first charge goes off CD\
-			// c.Core.Log.Infof("\t Sucrose last diff %v", c.Core.F-last)
-			c.Tags["last"] = last + 600
-			c.SetCD(core.ActionSkill, last+600-c.Core.F)
-			// c.Core.Log.Infof("\t Sucrose skill going on CD until %v, last = %v", last+900, c.Tags["last"])
-		} else {
-			//so if last is more than 15s in the past, then both charges must be up
-			//so then the charge restarts now
-			c.Tags["last"] = c.Core.F
-			// c.Core.Log.Infof("\t Sucrose charge cd starts at %v", c.Core.F)
-		}
-	} else {
-		c.SetCD(core.ActionSkill, 600)
-	}
+	c.SetCDWithDelay(core.ActionSkill, 600, 10)
 
 	return f, a
 }
@@ -153,7 +136,7 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	}
 	snap := c.Snapshot(&ai)
 
-	c.Core.Status.AddStatus("ganyuburst", 15*60)
+	c.Core.Status.AddStatus("ganyuburst", 15*60+130)
 
 	rad, ok := p["radius"]
 	if !ok {
@@ -166,13 +149,14 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	lastHit := make(map[core.Target]int)
 	// ccc := 0
 	//tick every .3 sec, every fifth hit is targetted i.e. 1, 0, 0, 0, 0, 1
-	for delay := 0; delay < 900; delay += 18 {
+	//first hit at 148
+	for delay := a; delay < 900+a; delay += 18 {
 		c.AddTask(func() {
 			//check if this hits first
 			target := -1
 			for i, t := range c.Core.Targets {
-				//skip for target 0 aka player
-				if i == 0 {
+				// skip non-enemy targets
+				if t.Type() != core.TargettableEnemy {
 					continue
 				}
 				if lastHit[t] < c.Core.F {
@@ -190,7 +174,7 @@ func (c *char) Burst(p map[string]int) (int, int) {
 			}
 			//deal dmg
 			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(9, false, core.TargettableEnemy), 0)
-		}, "ganyu-q", delay+f)
+		}, "ganyu-q", delay)
 
 	}
 	// c.AddTask(func() {
@@ -200,72 +184,61 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	//a4 every .3 seconds for the duration of the burst, add ice dmg up to active char for 1sec
 	//duration is 15 seconds
 	//starts from end of cast
-	for i := f; i < 900+f; i += 18 {
+	mA4 := make([]float64, core.EndStatType)
+	mC4 := make([]float64, core.EndStatType)
+	mA4[core.CryoP] = 0.2
+	for i := a; i < 900+a; i += 18 {
 		t := i
 		c.AddTask(func() {
 			active := c.Core.Chars[c.Core.ActiveChar]
-			val := make([]float64, core.EndStatType)
-			val[core.CryoP] = 0.2
 			active.AddMod(core.CharStatMod{
-				Key: "ganyu-field",
-				Amount: func() ([]float64, bool) {
-					return val, true
-				},
+				Key:    "ganyu-field",
 				Expiry: c.Core.F + 60,
+				Amount: func() ([]float64, bool) {
+					return mA4, true
+				},
 			})
-			if t >= 900-18 {
+			if t >= 900+a-18 {
 				c.Core.Log.NewEvent("a4 last tick", core.LogCharacterEvent, c.Index, "ends_on", c.Core.F+60)
 			}
-		}, "ganyu-a4", i)
-	}
 
-	if c.Base.Cons >= 4 {
-		//we just assume this lasts for the full duration since no one moves...
-		start := c.Core.F
-
-		val := make([]float64, core.EndStatType)
-		c.AddMod(core.CharStatMod{
-			Key:    "ganyu-c4",
-			Expiry: c.Core.F + 1080,
-			Amount: func() ([]float64, bool) {
-				elapsed := c.Core.F - start
-				stacks := int(elapsed / 180)
-				if stacks > 5 {
-					stacks = 5
+			// C4: similar to A4 expect it lingers for 3s
+			// assume this lasts for the full duration since no one moves...
+			if c.Base.Cons >= 4 {
+				// check for 1st tick and reset stacks if expired
+				if t == a && !c.PreDamageModIsActive("ganyu-c4") {
+					c.c4Stacks = 0
 				}
-				val[core.DmgP] = float64(stacks) * 0.05
-				return val, true
-			},
-		})
+
+				// increase stacks at 3s interval
+				if (t-a)%180 == 0 {
+					c.c4Stacks++
+					if c.c4Stacks > 5 {
+						c.c4Stacks = 5
+					}
+					mC4[core.DmgP] = float64(c.c4Stacks) * 0.05
+				}
+
+				// TODO: should be changed to target mod
+				for _, char := range c.Core.Chars {
+					char.AddPreDamageMod(core.PreDamageMod{
+						Key:    "ganyu-c4",
+						Expiry: c.Core.F + 60*3,
+						Amount: func(atk *core.AttackEvent, t core.Target) ([]float64, bool) {
+							return mC4, true
+						},
+					})
+				}
+
+				c.Core.Log.NewEvent("ganyu c4 stacks", core.LogCharacterEvent, c.Index, "stacks", c.c4Stacks)
+			}
+		}, "ganyu-burst-checks", i)
 	}
 
 	//add cooldown to sim
-	c.SetCDWithDelay(core.ActionBurst, 15*60, 8)
+	c.SetCD(core.ActionBurst, 15*60)
 	//use up energy
-	c.ConsumeEnergy(8)
+	c.ConsumeEnergy(3)
 
 	return f, a
-}
-
-func (c *char) ResetActionCooldown(a core.ActionType) {
-	//we're overriding this b/c of the c1 charges
-	switch a {
-	case core.ActionBurst:
-		c.ActionCD[a] = 0
-	case core.ActionSkill:
-		if c.Base.Cons < 2 {
-			c.ActionCD[a] = 0
-			return
-		}
-		//ok here's the fun part...
-		//if last is more than 15s away from current frame then both charges are up, do nothing
-		if c.Core.F-c.Tags["last"] > 600 || c.Tags["last"] == 0 {
-			return
-		}
-		//otherwise move CD and restart charging last now
-		c.Tags["last"] = c.Core.F
-		// c.CD[def.SkillCD] = c.Core.F
-		c.SetCD(a, 0)
-
-	}
 }

@@ -7,11 +7,13 @@ import (
 
 type char struct {
 	*character.Tmpl
+	burstCastF     int
 	eyeICD         int
 	stacksConsumed float64
 	stacks         float64
 	restoreICD     int
 	restoreCount   int
+	applyC4        bool
 	c6Count        int
 	c6ICD          int
 }
@@ -41,15 +43,20 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	c.NormalHitNum = 5
 	c.CharZone = core.ZoneInazuma
 
-	if c.Base.Cons == 6 {
-		c.c6()
-	}
+	return &c, nil
+}
+
+func (c *char) Init() {
+	c.Tmpl.Init()
+	c.InitCancelFrames()
 
 	c.eyeOnDamage()
 	c.onBurstStackCount()
 	c.onSwapClearBurst()
 
-	return &c, nil
+	if c.Base.Cons == 6 {
+		c.c6()
+	}
 }
 
 func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
@@ -70,7 +77,7 @@ func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
 func (c *char) Snapshot(a *core.AttackInfo) core.Snapshot {
 	s := c.Tmpl.Snapshot(a)
 
-	//a2 add dmg based on ER%
+	//a1 add dmg based on ER%
 	excess := int(s.Stats[core.ER] / 0.01)
 
 	s.Stats[core.ElectroP] += float64(excess) * 0.004 /// 0.4% extra dmg

@@ -6,6 +6,8 @@ import (
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
+var hitmarks = [][]int{{4, 17}, {15}, {15}, {14, 31}, {16}, {39}}
+
 // Normal attack damage queue generator
 // relatively standard with no major differences versus other characters
 func (c *char) Attack(p map[string]int) (int, int) {
@@ -24,7 +26,7 @@ func (c *char) Attack(p map[string]int) (int, int) {
 
 	for i, mult := range attack[c.NormalCounter] {
 		ai.Mult = mult[c.TalentLvlAttack()]
-		c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.1, false, core.TargettableEnemy), f-5+i, f-5+i)
+		c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.1, false, core.TargettableEnemy), hitmarks[c.NormalCounter][i], hitmarks[c.NormalCounter][i])
 	}
 
 	c.AdvanceNormalIndex()
@@ -51,23 +53,25 @@ func (c *char) ChargeAttack(p map[string]int) (int, int) {
 		Durability: 25,
 		Mult:       charge[c.TalentLvlAttack()],
 	}
-	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.1, false, core.TargettableEnemy), f-1, f-1)
+	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.1, false, core.TargettableEnemy), f, f)
 
 	//return animation cd
 	return f, a
 }
+
+var collisionFrame = 38
 
 // Plunge normal falling attack damage queue generator
 // Standard - Always part of high/low plunge attacks
 func (c *char) PlungeAttack(delay int) (int, int) {
 	ai := core.AttackInfo{
 		ActorIndex: c.Index,
-		Abil:       "Plunge (Normal)",
+		Abil:       "Plunge Collision",
 		AttackTag:  core.AttackTagPlunge,
 		ICDTag:     core.ICDTagNone,
 		ICDGroup:   core.ICDGroupDefault,
 		Element:    core.Physical,
-		Durability: 25,
+		Durability: 0,
 		Mult:       plunge[c.TalentLvlAttack()],
 	}
 	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.1, false, core.TargettableEnemy), delay, delay)
@@ -77,21 +81,19 @@ func (c *char) PlungeAttack(delay int) (int, int) {
 }
 
 // High Plunge attack damage queue generator
-// Use the "plunge_hits" optional argument to determine how many plunge falling hits you do on the way down
+// Use the "collision" optional argument if you want to do a falling hit on the way down
 // Default = 0
 func (c *char) HighPlungeAttack(p map[string]int) (int, int) {
 
 	f, a := c.ActionFrames(core.ActionHighPlunge, p)
 
-	plungeHits, ok := p["plunge_hits"]
+	collision, ok := p["collision"]
 	if !ok {
-		plungeHits = 0 // Number of normal plunge hits
+		collision = 0 // Whether or not Xiao does a collision hit
 	}
 
-	for i := 0; i < plungeHits; i++ {
-		// Add plunge attack in each frame leading up to final hit for now - not sure we have clear mechanics on this
-		// TODO: Perhaps amend later, but functionally in combat you usually get at most one of these anyway
-		c.PlungeAttack(f - i - 2)
+	if collision > 0 {
+		c.PlungeAttack(collisionFrame)
 	}
 
 	ai := core.AttackInfo{
@@ -105,28 +107,26 @@ func (c *char) HighPlungeAttack(p map[string]int) (int, int) {
 		Durability: 25,
 		Mult:       highplunge[c.TalentLvlAttack()],
 	}
-	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), f-1, f-1)
+	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), f, f)
 
 	//return animation cd
 	return f, a
 }
 
 // Low Plunge attack damage queue generator
-// Use the "plunge_hits" optional argument to determine how many plunge falling hits you do on the way down
+// Use the "collision" optional argument if you want to do a falling hit on the way down
 // Default = 0
 func (c *char) LowPlungeAttack(p map[string]int) (int, int) {
 
 	f, a := c.ActionFrames(core.ActionLowPlunge, p)
 
-	plungeHits, ok := p["plunge_hits"]
+	collision, ok := p["collision"]
 	if !ok {
-		plungeHits = 0 // Number of normal plunge hits
+		collision = 0 // Whether or not Xiao does a collision hit
 	}
 
-	for i := 0; i < plungeHits; i++ {
-		// Add plunge attack in each frame leading up to final hit for now - not sure we have clear mechanics on this
-		// TODO: Perhaps amend later, but functionally in combat you usually get at most one of these anyway
-		c.PlungeAttack(f - i - 2)
+	if collision > 0 {
+		c.PlungeAttack(collisionFrame)
 	}
 
 	ai := core.AttackInfo{
@@ -140,7 +140,7 @@ func (c *char) LowPlungeAttack(p map[string]int) (int, int) {
 		Durability: 25,
 		Mult:       lowplunge[c.TalentLvlAttack()],
 	}
-	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), f-1, f-1)
+	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), f, f)
 
 	//return animation cd
 	return f, a
@@ -152,13 +152,6 @@ func (c *char) LowPlungeAttack(p map[string]int) (int, int) {
 func (c *char) Skill(p map[string]int) (int, int) {
 
 	f, a := c.ActionFrames(core.ActionSkill, p)
-	// According to KQM library, double E is only 60 frames long whereas single cast is 36
-	// No idea how this works, but add a special case to reduce the frames of the 2nd cast
-	// TODO: No data listed on how 3 casts work - this might be too few frames compared to actual 3x usage
-	if c.Core.LastAction.Target == core.Xiao && c.Core.LastAction.Typ == core.ActionSkill {
-		f = 60 - f
-		a = 60 - a
-	}
 
 	// Add damage based on A4
 	if c.a4Expiry <= c.Core.F {
@@ -170,7 +163,7 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		Abil:       "Lemniscatic Wind Cycling",
 		AttackTag:  core.AttackTagElementalArt,
 		ICDTag:     core.ICDTagElementalArt,
-		ICDGroup:   core.ICDGroupDefault,
+		ICDGroup:   core.ICDGroupXiaoDash,
 		Element:    core.Anemo,
 		Durability: 25,
 		Mult:       skill[c.TalentLvlSkill()],
@@ -198,44 +191,16 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		return f, a
 	}
 
-	// Handle E charges
-	if c.Tags["eCharge"] == 1 {
-		c.SetCD(core.ActionSkill, c.eNextRecover)
-	} else {
-		c.eNextRecover = c.Core.F + 601
-		c.Core.Log.NewEvent("xiao e charge used, queuing next recovery", core.LogCharacterEvent, c.Index, "recover at", c.eNextRecover)
-		c.AddTask(c.recoverCharge(c.Core.F), "charge", 600)
-		c.eTickSrc = c.Core.F
-	}
-	c.Tags["eCharge"]--
+	c.SetCD(core.ActionSkill, 600)
 
 	return f, a
-}
-
-// Helper function that queues up Xiao e charge recovery - similar to other charge recovery functions
-func (c *char) recoverCharge(src int) func() {
-	return func() {
-		// Required stopper for recursion
-		if c.eTickSrc != src {
-			c.Core.Log.NewEvent("xiao e recovery function ignored, src diff", core.LogCharacterEvent, c.Index, "src", src, "new src", c.eTickSrc)
-			return
-		}
-		c.Tags["eCharge"]++
-		c.Core.Log.NewEvent("xiao e recovering a charge", core.LogCharacterEvent, c.Index, "skill last used at", src, "total charges", c.Tags["eCharge"])
-		c.SetCD(core.ActionSkill, 0)
-		if c.Tags["eCharge"] >= c.eChargeMax {
-			return
-		}
-
-		c.eNextRecover = c.Core.F + 601
-		c.Core.Log.NewEvent("xiao e charge queuing next recovery", core.LogCharacterEvent, c.Index, "recover at", c.eNextRecover)
-		c.AddTask(c.recoverCharge(src), "charge", 600)
-	}
 }
 
 // Sets Xiao's burst damage state
 func (c *char) Burst(p map[string]int) (int, int) {
 	f, a := c.ActionFrames(core.ActionBurst, p)
+	var HPicd int
+	HPicd = 0
 
 	// Per previous code, believe that the burst duration starts ticking down from after the animation is done
 	// TODO: No indication of that in library though
@@ -246,15 +211,29 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	// Per gameplay video, HP ticks start after animation is finished
 	for i := f + 60; i < 900+f; i++ {
 		c.AddTask(func() {
-			if c.Core.Status.Duration("xiaoburst") > 0 {
-				c.HPCurrent = c.HPCurrent * (1 - burstDrain[c.TalentLvlBurst()])
+			if c.Core.Status.Duration("xiaoburst") > 0 && c.Core.F >= HPicd {
+				HPicd = c.Core.F + 60
+				c.Core.Health.Drain(core.DrainInfo{
+					ActorIndex: c.Index,
+					Abil:       "Bane of All Evil",
+					Amount:     burstDrain[c.TalentLvlBurst()] * c.HP(),
+				})
 			}
 		}, "xiaoburst-hp-drain", i)
 	}
 
-	// Checked gameplay - burst starts ticking down from activation. CD is 16.6 seconds after animation is done
-	c.SetCDWithDelay(core.ActionBurst, 18*60, 39)
-	c.ConsumeEnergy(39)
+	c.SetCDWithDelay(core.ActionBurst, 18*60, 29)
+	c.ConsumeEnergy(36)
 
+	return f, a
+}
+
+func (c *char) Dash(p map[string]int) (int, int) {
+	f, a := c.ActionFrames(core.ActionDash, p)
+	return f, a
+}
+
+func (c *char) Jump(p map[string]int) (int, int) {
+	f, a := c.ActionFrames(core.ActionJump, p)
 	return f, a
 }
