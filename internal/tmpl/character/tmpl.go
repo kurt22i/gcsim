@@ -12,10 +12,16 @@ type Tmpl struct {
 	Core  *core.Core
 	Rand  *rand.Rand
 	Index int
-	//this should describe the frame in which the abil becomes available
-	//if frame > current then it's available. no need to decrement this way
-	// CD        map[string]int
-	ActionCD      []int
+
+	//cooldown related
+	ActionCD               []int
+	cdQueueWorkerStartedAt []int
+	cdCurrentQueueWorker   []*func()
+	cdQueue                [][]int
+	AvailableCDCharge      []int
+	additionalCDCharge     []int
+
+	//mods
 	Mods          []core.CharStatMod
 	PreDamageMods []core.PreDamageMod
 	ReactMod      []core.ReactionBonusMod
@@ -34,8 +40,8 @@ type Tmpl struct {
 	Energy    float64
 	EnergyMax float64
 
+	// TODO: maybe should change this to % of max hp
 	HPCurrent float64
-	HPMax     float64
 
 	//counters
 	NormalHitNum  int //how many hits in a normal combo
@@ -85,6 +91,17 @@ func NewTemplateChar(x *core.Core, p core.CharacterProfile) (*Tmpl, error) {
 	t.normalCancelFrames = make(map[int]map[core.ActionType]int)
 	t.cancelFrames = make(map[core.ActionType]map[core.ActionType]int)
 
+	t.cdQueueWorkerStartedAt = make([]int, core.EndActionType)
+	t.cdCurrentQueueWorker = make([]*func(), core.EndActionType)
+	t.cdQueue = make([][]int, core.EndActionType)
+	t.additionalCDCharge = make([]int, core.EndActionType)
+	t.AvailableCDCharge = make([]int, core.EndActionType)
+
+	for i := 0; i < len(t.cdQueue); i++ {
+		t.cdQueue[i] = make([]int, 0, 4)
+		t.AvailableCDCharge[i] = 1
+	}
+
 	return &t, nil
 }
 
@@ -94,23 +111,9 @@ func (t *Tmpl) SetIndex(index int) {
 
 // Character initialization function. Occurs AFTER all char/weapons are initially loaded
 func (t *Tmpl) Init() {
-	hpp := t.Stats[core.HPP]
-	hp := t.Stats[core.HP]
-
-	for _, m := range t.Mods {
-		if m.Expiry > t.Core.F || m.Expiry == -1 {
-			a, ok := m.Amount()
-			if ok {
-				hpp += a[core.HPP]
-				hp += a[core.HP]
-			}
-		}
-	}
-
-	t.HPMax = t.Base.HP*(1+hpp) + hp
-	// c.HPCurrent = 1
-	if t.HPCurrent > t.HPMax {
-		t.HPCurrent = t.HPMax
+	maxhp := t.MaxHP()
+	if t.HP() > maxhp {
+		t.HPCurrent = maxhp
 	}
 }
 
@@ -133,23 +136,35 @@ func (c *Tmpl) AddPreDamageMod(mod core.PreDamageMod) {
 			ind = i
 		}
 	}
-	if ind > -1 {
-		c.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, c.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
-		c.PreDamageMods[ind] = mod
-	} else {
-		c.PreDamageMods = append(c.PreDamageMods, mod)
-		c.Core.Log.NewEvent("mod added", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
-	}
 
-	// Add task to check for mod expiry in debug instances
-	if c.Core.Flags.LogDebug && mod.Expiry > -1 {
-		c.AddTask(func() {
-			if c.PreDamageModIsActive(mod.Key) {
-				return
-			}
-			c.Core.Log.NewEvent("mod expired", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
-		}, "check-mod-expiry", mod.Expiry+1-c.Core.F)
+	// check if mod exists and has not expired
+	if ind != -1 && (c.PreDamageMods[ind].Expiry > c.Core.F || c.PreDamageMods[ind].Expiry == -1) {
+		c.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, c.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
+		mod.Event = c.PreDamageMods[ind].Event
+	} else {
+		mod.Event = c.Core.Log.NewEvent("mod added", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
+		// append empty mod if we can not reuse mods[ind]
+		if ind == -1 {
+			c.PreDamageMods = append(c.PreDamageMods, core.PreDamageMod{})
+			ind = len(c.PreDamageMods) - 1
+		}
 	}
+	mod.Event.SetEnded(mod.Expiry)
+	c.PreDamageMods[ind] = mod
+}
+
+func (c *Tmpl) DeletePreDamageMod(key string) {
+	n := 0
+	for _, v := range c.PreDamageMods {
+		if v.Key == key {
+			v.Event.SetEnded(c.Core.F)
+			c.Core.Log.NewEvent("mod deleted", core.LogStatusEvent, c.Index, "key", key)
+		} else {
+			c.PreDamageMods[n] = v
+			n++
+		}
+	}
+	c.PreDamageMods = c.PreDamageMods[:n]
 }
 
 func (c *Tmpl) AddMod(mod core.CharStatMod) {
@@ -159,23 +174,35 @@ func (c *Tmpl) AddMod(mod core.CharStatMod) {
 			ind = i
 		}
 	}
-	if ind > -1 {
-		c.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, c.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
-		c.Mods[ind] = mod
-	} else {
-		c.Mods = append(c.Mods, mod)
-		c.Core.Log.NewEvent("mod added", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
-	}
 
-	// Add task to check for mod expiry in debug instances
-	if c.Core.Flags.LogDebug && mod.Expiry > -1 {
-		c.AddTask(func() {
-			if c.ModIsActive(mod.Key) {
-				return
-			}
-			c.Core.Log.NewEvent("mod expired", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
-		}, "check-mod-expiry", mod.Expiry+1-c.Core.F)
+	// check if mod exists and has not expired
+	if ind != -1 && (c.Mods[ind].Expiry > c.Core.F || c.Mods[ind].Expiry == -1) {
+		c.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, c.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
+		mod.Event = c.Mods[ind].Event
+	} else {
+		mod.Event = c.Core.Log.NewEvent("mod added", core.LogStatusEvent, c.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
+		// append empty mod if we can not reuse mods[ind]
+		if ind == -1 {
+			c.Mods = append(c.Mods, core.CharStatMod{})
+			ind = len(c.Mods) - 1
+		}
 	}
+	mod.Event.SetEnded(mod.Expiry)
+	c.Mods[ind] = mod
+}
+
+func (c *Tmpl) DeleteMod(key string) {
+	n := 0
+	for _, v := range c.Mods {
+		if v.Key == key {
+			v.Event.SetEnded(c.Core.F)
+			c.Core.Log.NewEvent("mod deleted", core.LogStatusEvent, c.Index, "key", key)
+		} else {
+			c.Mods[n] = v
+			n++
+		}
+	}
+	c.Mods = c.Mods[:n]
 }
 
 func (c *Tmpl) ModIsActive(key string) bool {
@@ -253,23 +280,21 @@ func (t *Tmpl) AddReactBonusMod(mod core.ReactionBonusMod) {
 			ind = i
 		}
 	}
-	if ind != -1 {
-		t.ReactMod[ind] = mod
-		t.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, t.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
-		return
-	}
-	t.ReactMod = append(t.ReactMod, mod)
-	t.Core.Log.NewEvent("mod added", core.LogStatusEvent, t.Index, "key", mod.Key, "expiry", mod.Expiry)
 
-	// Add task to check for mod expiry in debug instances
-	if t.Core.Flags.LogDebug && mod.Expiry > -1 {
-		t.AddTask(func() {
-			if t.ReactBonusModIsActive(mod.Key) {
-				return
-			}
-			t.Core.Log.NewEvent("mod expired", core.LogStatusEvent, t.Index, "key", mod.Key, "expiry", mod.Expiry)
-		}, "check-mod-expiry", mod.Expiry+1-t.Core.F)
+	// check if mod exists and has not expired
+	if ind != -1 && (t.ReactMod[ind].Expiry > t.Core.F || t.ReactMod[ind].Expiry == -1) {
+		t.Core.Log.NewEvent("mod refreshed", core.LogStatusEvent, t.Index, "overwrite", true, "key", mod.Key, "expiry", mod.Expiry)
+		mod.Event = t.ReactMod[ind].Event
+	} else {
+		mod.Event = t.Core.Log.NewEvent("mod added", core.LogStatusEvent, t.Index, "overwrite", false, "key", mod.Key, "expiry", mod.Expiry)
+		// append empty mod if we can not reuse mods[ind]
+		if ind == -1 {
+			t.ReactMod = append(t.ReactMod, core.ReactionBonusMod{})
+			ind = len(t.ReactMod) - 1
+		}
 	}
+	mod.Event.SetEnded(mod.Expiry)
+	t.ReactMod[ind] = mod
 }
 
 func (c *Tmpl) Tag(key string) int {

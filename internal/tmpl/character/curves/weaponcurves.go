@@ -182,6 +182,43 @@ var WeaponBaseMap = map[string]WeaponBase{
 			},
 		},
 	},
+	"aquasimulacra": {
+		AtkCurve:         GROW_CURVE_ATTACK_304,
+		SpecializedCurve: GROW_CURVE_CRITICAL_301,
+		BaseAtk:          44.33580017089844,
+		BaseSpecialized:  0.19200000166893005,
+		Specialized:      core.CD,
+		PromotionBonus: []PromoData{
+			{
+				MaxLevel: 20,
+				Atk:      0,
+			},
+			{
+				MaxLevel: 40,
+				Atk:      31.100000381469727,
+			},
+			{
+				MaxLevel: 50,
+				Atk:      62.20000076293945,
+			},
+			{
+				MaxLevel: 60,
+				Atk:      93.4000015258789,
+			},
+			{
+				MaxLevel: 70,
+				Atk:      124.5,
+			},
+			{
+				MaxLevel: 80,
+				Atk:      155.60000610351562,
+			},
+			{
+				MaxLevel: 90,
+				Atk:      186.6999969482422,
+			},
+		},
+	},
 	"aquilafavonia": {
 		AtkCurve:         GROW_CURVE_ATTACK_302,
 		SpecializedCurve: GROW_CURVE_CRITICAL_301,
@@ -1128,6 +1165,43 @@ var WeaponBaseMap = map[string]WeaponBase{
 			},
 		},
 	},
+	"fadingtwilight": {
+		AtkCurve:         GROW_CURVE_ATTACK_202,
+		SpecializedCurve: GROW_CURVE_CRITICAL_201,
+		BaseAtk:          43.734901428222656,
+		BaseSpecialized:  0.06666699796915054,
+		Specialized:      core.ER,
+		PromotionBonus: []PromoData{
+			{
+				MaxLevel: 20,
+				Atk:      0,
+			},
+			{
+				MaxLevel: 40,
+				Atk:      25.899999618530273,
+			},
+			{
+				MaxLevel: 50,
+				Atk:      51.900001525878906,
+			},
+			{
+				MaxLevel: 60,
+				Atk:      77.80000305175781,
+			},
+			{
+				MaxLevel: 70,
+				Atk:      103.69999694824219,
+			},
+			{
+				MaxLevel: 80,
+				Atk:      129.6999969482422,
+			},
+			{
+				MaxLevel: 90,
+				Atk:      155.60000610351562,
+			},
+		},
+	},
 	"favoniuscodex": {
 		AtkCurve:         GROW_CURVE_ATTACK_201,
 		SpecializedCurve: GROW_CURVE_CRITICAL_201,
@@ -1606,6 +1680,43 @@ var WeaponBaseMap = map[string]WeaponBase{
 			{
 				MaxLevel: 90,
 				Atk:      155.60000610351562,
+			},
+		},
+	},
+	"harangeppakufutsu": {
+		AtkCurve:         GROW_CURVE_ATTACK_301,
+		SpecializedCurve: GROW_CURVE_CRITICAL_301,
+		BaseAtk:          45.9364013671875,
+		BaseSpecialized:  0.07199999690055847,
+		Specialized:      core.CR,
+		PromotionBonus: []PromoData{
+			{
+				MaxLevel: 20,
+				Atk:      0,
+			},
+			{
+				MaxLevel: 40,
+				Atk:      31.100000381469727,
+			},
+			{
+				MaxLevel: 50,
+				Atk:      62.20000076293945,
+			},
+			{
+				MaxLevel: 60,
+				Atk:      93.4000015258789,
+			},
+			{
+				MaxLevel: 70,
+				Atk:      124.5,
+			},
+			{
+				MaxLevel: 80,
+				Atk:      155.60000610351562,
+			},
+			{
+				MaxLevel: 90,
+				Atk:      186.6999969482422,
 			},
 		},
 	},

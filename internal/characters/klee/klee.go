@@ -11,11 +11,8 @@ func init() {
 
 type char struct {
 	*character.Tmpl
-	c1Chance     float64
-	eCharge      int
-	eChargeMax   int
-	eNextRecover int
-	eTickSrc     int
+	c1Chance float64
+	sparkICD int
 }
 
 func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
@@ -35,16 +32,19 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	c.EnergyMax = 60
 	c.Weapon.Class = core.WeaponClassCatalyst
 	c.NormalHitNum = 3
-	c.eChargeMax = 2
-	c.eCharge = 2
 
-	c.a4()
+	c.sparkICD = -1
 
-	if c.Base.Cons >= 4 {
-		c.c4()
-	}
+	c.SetNumCharges(core.ActionSkill, 2)
 
 	return &c, nil
+}
+
+func (c *char) Init() {
+	c.Tmpl.Init()
+
+	c.a4()
+	c.onExitField()
 }
 
 func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
@@ -52,7 +52,7 @@ func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
 	case core.ActionDash:
 		return 18
 	case core.ActionCharge:
-		if c.Tags["spark"] > 0 {
+		if c.Core.Status.Duration("kleespark") > 0 {
 			return 0
 		}
 		return 50
@@ -61,6 +61,18 @@ func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
 		return 0
 	}
 
+}
+
+func (c *char) a1() {
+	if c.Core.F < c.sparkICD {
+		return
+	}
+	if c.Core.Rand.Float64() < 0.5 {
+		return
+	}
+	c.sparkICD = c.Core.F + 60*4
+	c.Core.Status.AddStatus("kleespark", 60*30)
+	c.Core.Log.NewEvent("klee gained spark", core.LogCharacterEvent, c.Index, "icd", c.sparkICD)
 }
 
 func (c *char) a4() {
@@ -80,7 +92,7 @@ func (c *char) a4() {
 			x.AddEnergy("klee-a4", 2)
 		}
 		return false
-	}, "kleea2")
+	}, "kleea1")
 }
 
 func (c *char) c1(delay int) {
@@ -110,11 +122,16 @@ func (c *char) c1(delay int) {
 
 }
 
-func (c *char) c4() {
+// clear klee burst when she leaves the field and handle c4
+func (c *char) onExitField() {
 	c.Core.Events.Subscribe(core.OnCharacterSwap, func(args ...interface{}) bool {
-		//if burst is active and klee no longer active char
-		if c.Core.ActiveChar != c.Index && c.Core.Status.Duration("kleeq") > 0 {
-			c.Core.Status.DeleteStatus("kleeq")
+		// check if burst is active
+		if c.Core.Status.Duration("kleeq") <= 0 {
+			return false
+		}
+		c.Core.Status.DeleteStatus("kleeq")
+
+		if c.Base.Cons >= 4 {
 			//blow up
 			ai := core.AttackInfo{
 				ActorIndex: c.Index,
@@ -130,6 +147,5 @@ func (c *char) c4() {
 			c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(5, false, core.TargettableEnemy), 0, 0)
 		}
 		return false
-
-	}, "klee-c4")
+	}, "klee-exit")
 }

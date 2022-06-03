@@ -55,7 +55,7 @@ type Core struct {
 	//core stuff
 	// queue        []Command
 	stamModifier []stamMod
-	lastStamUse  int
+	LastStamUse  int
 
 	//track characters
 	ActiveChar     int             // index of currently active char
@@ -170,13 +170,9 @@ func (c *Core) Swap(next CharKey) int {
 }
 
 func (c *Core) AnimationCancelDelay(next ActionType, p map[string]int) int {
-	//if last action is jump, dash, swap,
+	//if last action is swap,
 	switch c.LastAction.Typ {
 	case ActionSwap:
-		fallthrough
-	case ActionDash:
-		fallthrough
-	case ActionJump:
 		return 0
 	}
 	//other wise check with the current character
@@ -199,11 +195,18 @@ func (c *Core) UserCustomDelay() int {
 	case ActionJump:
 		d = c.Flags.Delays.Jump
 	case ActionSwap:
-		d = c.Flags.Delays.Swap
+		d = 0
 	case ActionAim:
 		d = c.Flags.Delays.Aim
 	}
-	return c.LastAction.Param["delay"] + d
+
+	//it takes one frame to queue an action, so delay should be reduced by one.
+	d += c.LastAction.Param["delay"] - 1
+	if d < 0 {
+		d = 0
+	}
+
+	return d
 }
 
 func (c *Core) ResetAllNormalCounter() {
@@ -249,7 +252,7 @@ func (c *Core) Tick() {
 	//run queued tasks
 	c.Tasks.Run()
 	//recover stamina
-	if c.Stam < MaxStam && c.F-c.lastStamUse > StamCDFrames {
+	if c.Stam < MaxStam && c.F-c.LastStamUse > StamCDFrames {
 		c.Stam += 25.0 / 60
 		if c.Stam > MaxStam {
 			c.Stam = MaxStam

@@ -41,6 +41,8 @@ func (r *Reactable) tryAddEC(a *core.AttackEvent) {
 		return
 	}
 
+	r.core.Events.Emit(core.OnElectroCharged, r.self, a)
+
 	//at this point ec is refereshed so we need to trigger a reaction
 	//and change ownership
 	atk := core.AttackInfo{
@@ -53,7 +55,9 @@ func (r *Reactable) tryAddEC(a *core.AttackEvent) {
 		Element:          core.Electro,
 		IgnoreDefPercent: 1,
 	}
-	atk.FlatDmg = 1.2 * r.calcReactionDmg(atk)
+	char := r.core.Chars[a.Info.ActorIndex]
+	em := char.Stat(core.EM)
+	atk.FlatDmg = 1.2 * r.calcReactionDmg(atk, em)
 	r.ecSnapshot = atk
 
 	//if this is a new ec then trigger tick immediately and queue up ticks
@@ -61,8 +65,6 @@ func (r *Reactable) tryAddEC(a *core.AttackEvent) {
 	//TODO: need to check if refresh ec triggers new tick immediately or not
 	if r.ecTickSrc == -1 {
 		r.ecTickSrc = r.core.F
-
-		r.core.Events.Emit(core.OnElectroCharged, r.self, a)
 
 		r.core.Combat.QueueAttack(
 			r.ecSnapshot,

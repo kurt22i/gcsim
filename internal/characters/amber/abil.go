@@ -39,7 +39,7 @@ func (c *char) Aimed(p map[string]int) (int, int) {
 	if !ok {
 		travel = 10
 	}
-	weakspot, ok := p["weakspot"]
+	weakspot := p["weakspot"]
 
 	b := p["bunny"]
 
@@ -65,26 +65,7 @@ func (c *char) Aimed(p map[string]int) (int, int) {
 		Mult:         aim[c.TalentLvlAttack()],
 		HitWeakPoint: weakspot == 1,
 	}
-
-	// d.AnimationFrames = f
-
-	//add 15% since 360noscope
-	cb := func(a core.AttackCB) {
-		if a.AttackEvent.Info.HitWeakPoint {
-			c.AddMod(core.CharStatMod{
-				Key: "a2",
-				Amount: func() ([]float64, bool) {
-					val := make([]float64, core.EndStatType)
-					val[core.ATKP] = 0.15
-					return val, true
-				},
-				Expiry: c.Core.F + 600,
-			})
-		}
-
-	}
-
-	c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(1, core.TargettableEnemy), f, f+travel, cb)
+	c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(1, core.TargettableEnemy), f, f+travel, c.a4)
 
 	if c.Base.Cons >= 1 {
 		ai.Mult = .2 * ai.Mult
@@ -109,39 +90,9 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		return f + hold, a + hold
 	}
 
-	switch c.eCharge {
-	case c.eChargeMax:
-		c.Core.Log.NewEvent("amber bunny at max charge, queuing next recovery", core.LogCharacterEvent, c.Index, "recover at", c.Core.F+721)
-		c.eNextRecover = c.Core.F + 721
-		c.AddTask(c.recoverCharge(c.Core.F), "charge", 720)
-		c.eTickSrc = c.Core.F
-	case 1:
-		c.SetCD(core.ActionSkill, c.eNextRecover)
-	}
-	c.eCharge--
+	c.SetCD(core.ActionSkill, 720)
 
 	return f + hold, a + hold
-}
-
-func (c *char) recoverCharge(src int) func() {
-	return func() {
-		if c.eTickSrc != src {
-			c.Core.Log.NewEvent("amber bunny recovery function ignored, src diff", core.LogCharacterEvent, c.Index, "src", src, "new src", c.eTickSrc)
-			return
-		}
-		c.eCharge++
-		c.Core.Log.NewEvent("amber bunny recovering a charge", core.LogCharacterEvent, c.Index, "src", src, "total charge", c.eCharge)
-		c.SetCD(core.ActionSkill, 0)
-		if c.eCharge >= c.eChargeMax {
-			//fully charged
-			return
-		}
-		//other wise restore another charge
-		c.Core.Log.NewEvent("amber bunny queuing next recovery", core.LogCharacterEvent, c.Index, "src", src, "recover at", c.Core.F+720)
-		c.eNextRecover = c.Core.F + 721
-		c.AddTask(c.recoverCharge(src), "charge", 720)
-
-	}
 }
 
 func (c *char) Burst(p map[string]int) (int, int) {

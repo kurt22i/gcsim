@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/genshinsim/gcsim/internal/tmpl/character"
+	"github.com/genshinsim/gcsim/internal/tmpl/player"
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
@@ -34,49 +35,16 @@ func NewChar(s *core.Core, p core.CharacterProfile) (core.Character, error) {
 	c.NormalHitNum = 5
 	c.BurstCon = 3
 	c.SkillCon = 5
-
-	if c.Base.Cons == 6 {
-		c.c6()
-	}
+	c.InitCancelFrames()
 
 	return &c, nil
 }
 
-func (c *char) ActionFrames(a core.ActionType, p map[string]int) (int, int) {
-	switch a {
-	case core.ActionAttack:
-		f := 0
-		switch c.NormalCounter {
-		//TODO: need to add atkspd mod
-		case 0:
-			f = 14 //frames from keqing lib
-		case 1:
-			f = 37 - 14
-		case 2:
-			f = 66 - 37
-		case 3:
-			f = 124 - 66
-		case 4:
-			f = 159 - 124
-		}
-		f = int(float64(f) / (1 + c.Stat(core.AtkSpd)))
-		return f, f
-	case core.ActionCharge:
-		return 73, 73
-	case core.ActionSkill:
+func (c *char) Init() {
+	c.Tmpl.Init()
 
-		hold := p["hold"]
-		//hold for p up to 5 seconds
-		if hold > 300 {
-			hold = 300
-		}
-
-		return 23 + hold, 23 + hold
-	case core.ActionBurst:
-		return 88, 88
-	default:
-		c.Core.Log.NewEventBuildMsg(core.LogActionEvent, c.Index, "unknown action (invalid frames): ", a.String())
-		return 0, 0
+	if c.Base.Cons == 6 {
+		c.c6()
 	}
 }
 
@@ -102,9 +70,15 @@ func (c *char) Attack(p map[string]int) (int, int) {
 		//check for healing
 		if c.Core.Rand.Float64() < 0.5 {
 			heal := 0.15 * (snap.BaseAtk*(1+snap.Stats[core.ATKP]) + snap.Stats[core.ATK])
-			c.Core.Health.HealAll(c.Index, heal)
+			c.Core.Health.Heal(core.HealInfo{
+				Caller:  c.Index,
+				Target:  -1,
+				Message: "Wind Companion",
+				Src:     heal,
+				Bonus:   c.Stat(core.Heal),
+			})
 		}
-	}, "jean-na", f-1)
+	}, "jean-na", f)
 
 	c.AdvanceNormalIndex()
 
@@ -126,9 +100,21 @@ func (c *char) ChargeAttack(p map[string]int) (int, int) {
 		Durability: 25,
 		Mult:       charge[c.TalentLvlAttack()],
 	}
-	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.4, false, core.TargettableEnemy), f-1, f-1)
+	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(0.4, false, core.TargettableEnemy), f, f)
 
 	return f, a
+}
+
+func (c *char) ActionStam(a core.ActionType, p map[string]int) float64 {
+	switch a {
+	case core.ActionDash:
+		return 18
+	case core.ActionCharge:
+		return 20
+	default:
+		c.Core.Log.NewEvent("ActionStam not implemented", core.LogActionEvent, c.Index, "action", a.String())
+		return 0
+	}
 }
 
 func (c *char) Skill(p map[string]int) (int, int) {
@@ -152,24 +138,27 @@ func (c *char) Skill(p map[string]int) (int, int) {
 		c.Core.Log.NewEvent("jean c1 adding 40% dmg", core.LogCharacterEvent, c.Index, "final dmg%", snap.Stats[core.DmgP])
 	}
 
-	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), f-1)
+	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), f)
 
 	count := 2
-	if c.Core.Rand.Float64() < .67 {
+	if c.Core.Rand.Float64() < 2.0/3.0 {
 		count++
 	}
 	c.QueueParticle("Jean", count, core.Anemo, f+100)
 
-	c.SetCD(core.ActionSkill, 360)
+	c.SetCDWithDelay(core.ActionSkill, 360, f-2)
 	return f, a
 }
 
 func (c *char) Burst(p map[string]int) (int, int) {
 	//p is the number of times enemy enters or exits the field
 	enter := p["enter"]
-	delay, ok := p["delay"]
+	if enter < 1 {
+		enter = 1
+	}
+	delay, ok := p["enter_delay"]
 	if !ok {
-		delay = 10
+		delay = 600 / enter
 	}
 
 	f, a := c.ActionFrames(core.ActionBurst, p)
@@ -186,21 +175,23 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	}
 	snap := c.Snapshot(&ai)
 
-	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(5, false, core.TargettableEnemy), f-10)
+	//initial hit at 40f
+	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(5, false, core.TargettableEnemy), 40)
 
 	ai.Abil = "Dandelion Breeze (In/Out)"
 	ai.Mult = burstEnter[c.TalentLvlBurst()]
+	//first enter is at frame 55
 	for i := 0; i < enter; i++ {
-		c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(5, false, core.TargettableEnemy), f+i*delay)
+		c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(5, false, core.TargettableEnemy), 55+i*delay)
 	}
 
-	c.Core.Status.AddStatus("jeanq", 630)
+	c.Core.Status.AddStatus("jeanq", 600+f)
 
 	if c.Base.Cons >= 4 {
 		//add debuff to all target for ??? duration
 		for _, t := range c.Core.Targets {
 			t.AddResMod("jeanc4", core.ResistMod{
-				Duration: 600, //10 seconds
+				Duration: 600 + f, //10 seconds + animation
 				Ele:      core.Anemo,
 				Value:    -0.4,
 			})
@@ -210,25 +201,58 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	//heal on cast
 	hpplus := snap.Stats[core.Heal]
 	atk := snap.BaseAtk*(1+snap.Stats[core.ATKP]) + snap.Stats[core.ATK]
-	heal := (burstInitialHealFlat[c.TalentLvlBurst()] + atk*burstInitialHealPer[c.TalentLvlBurst()]) * (1 + hpplus)
-	healDot := (burstDotHealFlat[c.TalentLvlBurst()] + atk*burstDotHealPer[c.TalentLvlBurst()]) * (1 + hpplus)
+	heal := burstInitialHealFlat[c.TalentLvlBurst()] + atk*burstInitialHealPer[c.TalentLvlBurst()]
+	healDot := burstDotHealFlat[c.TalentLvlBurst()] + atk*burstDotHealPer[c.TalentLvlBurst()]
 
 	c.AddTask(func() {
-		c.Core.Health.HealAll(c.Index, heal)
+		c.Core.Health.Heal(core.HealInfo{
+			Caller:  c.Index,
+			Target:  -1,
+			Message: "Dandelion Breeze",
+			Src:     heal,
+			Bonus:   hpplus,
+		})
 	}, "Jean Heal Initial", f)
 
-	//duration is 10.5s
-	for i := 60; i < 630; i++ {
+	player, ok := c.Core.Targets[0].(*player.Player)
+	if !ok {
+		panic("target 0 should be Player but is not!!")
+	}
+
+	//attack self
+	selfSwirl := core.AttackInfo{
+		ActorIndex: c.Index,
+		Abil:       "Dandelion Breeze (Self Swirl)",
+		Element:    core.Anemo,
+		Durability: 25,
+	}
+
+	//duration is 10.5s, first tick start at frame 100, + 60 each
+	for i := 100; i < 100+630; i += 60 {
 		c.AddTask(func() {
-			c.Core.Log.NewEvent("jean q healing", core.LogCharacterEvent, c.Index, "+heal", hpplus, "atk", atk, "heal amount", healDot)
-			c.Core.Health.HealActive(c.Index, heal)
+			// c.Core.Log.NewEvent("jean q healing", core.LogCharacterEvent, c.Index, "+heal", hpplus, "atk", atk, "heal amount", healDot)
+			c.Core.Health.Heal(core.HealInfo{
+				Caller:  c.Index,
+				Target:  c.Core.ActiveChar,
+				Message: "Dandelion Field",
+				Src:     healDot,
+				Bonus:   hpplus,
+			})
+
+			ae := core.AttackEvent{
+				Info:        selfSwirl,
+				Pattern:     core.NewDefSingleTarget(0, player.TargetType),
+				SourceFrame: c.Core.F,
+			}
+			c.Core.Log.NewEvent("jean self swirling", core.LogCharacterEvent, c.Index)
+			player.ReactWithSelf(&ae)
 		}, "Jean Tick", i)
 	}
 
-	c.SetCD(core.ActionBurst, 1200)
+	c.SetCDWithDelay(core.ActionBurst, 1200, 38)
 	c.AddTask(func() {
 		c.Energy = 16 //jean a4
-	}, "jean-burst-energy-consume", 46)
+	}, "jean-burst-energy-consume", 41)
 
 	return f, a
 }

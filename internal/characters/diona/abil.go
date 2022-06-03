@@ -144,14 +144,20 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	snap := c.Snapshot(&ai)
 	hpplus := snap.Stats[core.Heal]
 	maxhp := c.MaxHP()
-	heal := (burstHealPer[c.TalentLvlBurst()]*maxhp + burstHealFlat[c.TalentLvlBurst()]) * (1 + hpplus)
+	heal := burstHealPer[c.TalentLvlBurst()]*maxhp + burstHealFlat[c.TalentLvlBurst()]
 
 	//ticks every 2s, first tick at t=1s, then t=3,5,7,9,11, lasts for 12.5
 	for i := 0; i < 6; i++ {
 		c.AddTask(func() {
 			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(5, false, core.TargettableEnemy), 0)
-			c.Core.Log.NewEvent("diona healing", core.LogCharacterEvent, c.Index, "+heal", hpplus, "max hp", maxhp, "heal amount", heal)
-			c.Core.Health.HealActive(c.Index, heal)
+			// c.Core.Log.NewEvent("diona healing", core.LogCharacterEvent, c.Index, "+heal", hpplus, "max hp", maxhp, "heal amount", heal)
+			c.Core.Health.Heal(core.HealInfo{
+				Caller:  c.Index,
+				Target:  c.Core.ActiveChar,
+				Message: "Drunken Mist",
+				Src:     heal,
+				Bonus:   hpplus,
+			})
 		}, "Diona Burst (DOT)", 60+i*120)
 	}
 
@@ -162,29 +168,34 @@ func (c *char) Burst(p map[string]int) (int, int) {
 	if c.Base.Cons >= 1 {
 		//15 energy after ends, flat not affected by ER
 		c.AddTask(func() {
-			c.Energy += 15
-			if c.Energy > c.EnergyMax {
-				c.Energy = c.EnergyMax
-			}
-			c.Core.Log.NewEvent("diona c1 regen 15 energy", core.LogEnergyEvent, c.Index, "new energy", c.Energy)
+			c.AddEnergy("diona-c1", 15)
 		}, "Diona C1", f+750)
 	}
 
 	if c.Base.Cons == 6 {
-		c.AddTask(func() {
-			for _, char := range c.Core.Chars {
-				this := char
-				val := make([]float64, core.EndStatType)
-				val[core.EM] = 200
-				this.AddMod(core.CharStatMod{
-					Key:    "diona-c6",
-					Expiry: c.Core.F + 750,
-					Amount: func() ([]float64, bool) {
-						return val, this.HP()/this.MaxHP() > 0.5
-					},
-				})
-			}
-		}, "c6-em-share", f)
+		val := make([]float64, core.EndStatType)
+		val[core.EM] = 200
+		//lasts 12.5 second, ticks every 0.5s; adds mod to active char for 2s
+		for i := 30; i < 750; i += 30 {
+			c.AddTask(func() {
+				//add 200EM to active char
+				char := c.Core.Chars[c.Core.ActiveChar]
+				if char.HP()/char.MaxHP() > 0.5 {
+					char.AddMod(core.CharStatMod{
+						Key:    "diona-c6",
+						Expiry: c.Core.F + 120, //lasts 2 seconds
+						Amount: func() ([]float64, bool) {
+							return val, true
+						},
+					})
+				} else {
+					//add healing bonus if < 0.5
+					c.Tags["c6bonus-"+char.Key().String()] = c.Core.F + 120
+				}
+
+			}, "c6-buffs", i)
+		}
+
 	}
 
 	c.SetCDWithDelay(core.ActionBurst, 1200, 49)

@@ -93,7 +93,6 @@ func (c *char) kitsuneBurst(ai core.AttackInfo, pattern core.AttackPattern) {
 }
 
 func (c *char) kitsuneTick(totem *kitsune) func() {
-
 	return func() {
 		//if deleted do nothing
 		if totem.deleted {
@@ -125,7 +124,13 @@ func (c *char) kitsuneTick(totem *kitsune) func() {
 			ai.IgnoreDefPercent = 0.60
 		}
 
+		done := false
 		cb := func(ac core.AttackCB) {
+			if c.Base.Cons >= 4 && !done {
+				done = true
+				c.c4()
+			}
+
 			//on hit check for particles
 			c.Core.Log.NewEvent("sky kitsune particle", core.LogCharacterEvent, c.Index, "lastParticleF", c.totemParticleICD)
 			if c.Core.F < c.totemParticleICD {
@@ -135,7 +140,7 @@ func (c *char) kitsuneTick(totem *kitsune) func() {
 			c.QueueParticle("yaemiko", 1, core.Electro, 30)
 		}
 
-		c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(1, core.TargettableEnemy), 1, 1, cb)
+		c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(c.Core.RandomEnemyTarget(), core.TargettableEnemy), 1, 1, cb)
 		// tick per 2.5 seconds
 		c.AddTask(c.kitsuneTick(totem), "kitsune-tick", 176)
 	}

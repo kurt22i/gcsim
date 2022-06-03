@@ -20,6 +20,7 @@ func (r *Reactable) tryFreeze(a *core.AttackEvent) {
 			//ec should have been taken care of already
 			a.Info.Durability -= consumed
 			a.Info.Durability = max(a.Info.Durability, 0)
+			r.core.Events.Emit(core.OnFrozen, r.self, a)
 			return
 		}
 		//otherwise attach hydro only if frozen exists
@@ -37,6 +38,7 @@ func (r *Reactable) tryFreeze(a *core.AttackEvent) {
 			r.Durability[core.Hydro] = max(r.Durability[core.Hydro], 0)
 			a.Info.Durability -= consumed
 			a.Info.Durability = max(a.Info.Durability, 0)
+			r.core.Events.Emit(core.OnFrozen, r.self, a)
 			return
 		}
 		//otherwise attach cryo only if frozen exists
@@ -51,7 +53,7 @@ func (r *Reactable) tryFreeze(a *core.AttackEvent) {
 		//should be here
 		return
 	}
-	r.core.Events.Emit(core.OnFrozen, r.self, a)
+
 }
 
 func max(a, b core.Durability) core.Durability {
@@ -86,7 +88,9 @@ func (r *Reactable) ShatterCheck(a *core.AttackEvent) {
 		Element:          core.Physical,
 		IgnoreDefPercent: 1,
 	}
-	ai.FlatDmg = 1.5 * r.calcReactionDmg(ai)
+	char := r.core.Chars[a.Info.ActorIndex]
+	em := char.Stat(core.EM)
+	ai.FlatDmg = 1.5 * r.calcReactionDmg(ai, em)
 	//shatter is a self attack
 	r.core.Combat.QueueAttack(
 		ai,

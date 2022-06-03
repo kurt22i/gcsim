@@ -20,17 +20,14 @@ func (c *char) Attack(p map[string]int) (int, int) {
 		AttackTag:  core.AttackTagNormal,
 		ICDTag:     core.ICDTagKleeFireDamage,
 		ICDGroup:   core.ICDGroupDefault,
+		StrikeType: core.StrikeTypeBlunt,
 		Element:    core.Pyro,
 		Durability: 25,
 		Mult:       attack[c.NormalCounter][c.TalentLvlAttack()],
 	}
-	cb := func(a core.AttackCB) {
-		if c.Core.Rand.Float64() < 0.5 {
-			c.Tags["spark"] = 1
-		}
-	}
 
-	c.Core.Combat.QueueAttack(ai, core.NewDefSingleTarget(1, core.TargettableEnemy), f, f+travel, cb)
+	cb := func(a core.AttackCB) { c.a1() }
+	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), f, f+travel, cb)
 
 	c.c1(f + travel)
 
@@ -62,13 +59,13 @@ func (c *char) ChargeAttack(p map[string]int) (int, int) {
 
 	//stam is calculated before this func is called so it's safe to
 	//set spark to 0 here
-
-	if c.Tags["spark"] == 1 {
-		c.Tags["spark"] = 0
-		snap.Stats[core.DmgP] += 0.5
+	if c.Core.Status.Duration("kleespark") > 0 {
+		snap.Stats[core.DmgP] += .50
+		c.Core.Status.DeleteStatus("kleespark")
+		c.Core.Log.NewEvent("klee consumed spark", core.LogCharacterEvent, c.Index, "icd", c.sparkICD)
 	}
 
-	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefSingleTarget(1, core.TargettableEnemy), f+travel)
+	c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(2, false, core.TargettableEnemy), f+travel)
 
 	c.c1(f + travel)
 
@@ -87,13 +84,7 @@ func (c *char) Skill(p map[string]int) (int, int) {
 
 	//mine lives for 5 seconds
 	//3 bounces, roughly 30, 70, 110 hits
-
-	cb := func(a core.AttackCB) {
-		if c.Core.Rand.Float64() < 0.5 {
-			c.Tags["spark"] = 1
-		}
-	}
-
+	cb := func(a core.AttackCB) { c.a1() }
 	for i := 0; i < bounce; i++ {
 		ai := core.AttackInfo{
 			ActorIndex: c.Index,
@@ -151,41 +142,10 @@ func (c *char) Skill(p map[string]int) (int, int) {
 
 	c.c1(f + 30)
 
-	switch c.eCharge {
-	case c.eChargeMax:
-		c.Core.Log.NewEvent("klee at max charge, queuing next recovery", core.LogCharacterEvent, c.Index, "recover at", c.Core.F+721)
-		c.eNextRecover = c.Core.F + 1201
-		c.AddTask(c.recoverCharge(c.Core.F), "charge", 1200)
-		c.eTickSrc = c.Core.F
-	case 1:
-		c.SetCD(core.ActionSkill, c.eNextRecover)
-	}
-
-	c.eCharge--
+	c.SetCD(core.ActionSkill, 1200)
 
 	// c.SetCD(def.ActionSkill, 20*60)
 	return f, a
-}
-
-func (c *char) recoverCharge(src int) func() {
-	return func() {
-		if c.eTickSrc != src {
-			c.Core.Log.NewEvent("klee mine recovery function ignored, src diff", core.LogCharacterEvent, c.Index, "src", src, "new src", c.eTickSrc)
-			return
-		}
-		c.eCharge++
-		c.Core.Log.NewEvent("klee mine recovering a charge", core.LogCharacterEvent, c.Index, "src", src, "total charge", c.eCharge)
-		c.SetCD(core.ActionSkill, 0)
-		if c.eCharge >= c.eChargeMax {
-			//fully charged
-			return
-		}
-		//other wise restore another charge
-		c.Core.Log.NewEvent("klee mine queuing next recovery", core.LogCharacterEvent, c.Index, "src", src, "recover at", c.Core.F+720)
-		c.eNextRecover = c.Core.F + 1201
-		c.AddTask(c.recoverCharge(src), "charge", 1200)
-
-	}
 }
 
 func (c *char) Burst(p map[string]int) (int, int) {
@@ -203,40 +163,43 @@ func (c *char) Burst(p map[string]int) (int, int) {
 		NoImpulse:  true,
 	}
 	//lasts 10 seconds, starts after 2.2 seconds maybe?
+	c.Core.Status.AddStatus("kleeq", 600+132)
 
 	//every 1.8 second +on added shoots between 3 to 5, ignore the queue thing.. space it out .2 between each wave i guess
 
+	// snapshot at end of animation?
+	var snap core.Snapshot
+	c.AddTask(func() {
+		snap = c.Snapshot(&ai)
+	}, "klee-burst-snapshot", 100)
+
 	for i := 132; i < 732; i += 108 {
 		c.AddTask(func() {
-			//no more if klee is not on field
-			if c.Core.ActiveChar != c.Index {
+			//no more if burst has ended early
+			if c.Core.Status.Duration("kleeq") <= 0 {
 				return
 			}
 			//wave 1 = 1
-			c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 0)
+			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), 0)
 			//wave 2 = 1 + 30% chance of 1
-			c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 12)
+			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), 12)
 			if c.Core.Rand.Float64() < 0.3 {
-				c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 12)
+				c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), 12)
 			}
 			//wave 3 = 1 + 50% chance of 1
-			c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 24)
+			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), 24)
 			if c.Core.Rand.Float64() < 0.5 {
-				c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(1, false, core.TargettableEnemy), 0, 24)
+				c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(1, false, core.TargettableEnemy), 24)
 			}
 		}, "klee-burst", i)
 	}
-
-	c.AddTask(func() {
-		c.Core.Status.AddStatus("kleeq", 600)
-	}, "klee-burst-status", 132)
 
 	//every 3 seconds add energy if c6
 	if c.Base.Cons == 6 {
 		for i := f + 180; i < f+600; i += 180 {
 			c.AddTask(func() {
-				//no more if klee is not on field
-				if c.Core.ActiveChar != c.Index {
+				//no more if burst has ended early
+				if c.Core.Status.Duration("kleeq") <= 0 {
 					return
 				}
 
@@ -245,19 +208,17 @@ func (c *char) Burst(p map[string]int) (int, int) {
 						continue
 					}
 					x.AddEnergy("klee-c6", 3)
-					c.Core.Log.NewEvent("klee c6 regen 3 energy", core.LogEnergyEvent, c.Index, "char", x.CharIndex(), "new energy", x.CurrentEnergy())
 				}
-
 			}, "klee-c6", i)
 		}
 
-		//add 25% buff
+		// add 10% pyro for 25s
+		m := make([]float64, core.EndStatType)
+		m[core.PyroP] = .1
 		for _, x := range c.Core.Chars {
-			val := make([]float64, core.EndStatType)
-			val[core.PyroP] = .1
 			x.AddMod(core.CharStatMod{
 				Key:    "klee-c6",
-				Amount: func() ([]float64, bool) { return val, true },
+				Amount: func() ([]float64, bool) { return m, true },
 				Expiry: c.Core.F + 1500,
 			})
 		}

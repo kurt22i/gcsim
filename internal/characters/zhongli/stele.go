@@ -1,6 +1,8 @@
 package zhongli
 
 import (
+	"math/rand"
+
 	"github.com/genshinsim/gcsim/pkg/core"
 )
 
@@ -16,7 +18,7 @@ func (c *char) newStele(dur int, max int) {
 		Element:    core.Geo,
 		Durability: 50,
 		Mult:       skill[c.TalentLvlSkill()],
-		FlatDmg:    0.019 * c.HPMax,
+		FlatDmg:    0.019 * c.MaxHP(),
 	}
 	c.Core.Combat.QueueAttack(ai, core.NewDefCircHit(2, false, core.TargettableEnemy), 0, 0)
 
@@ -53,7 +55,7 @@ func (c *char) newStele(dur int, max int) {
 		Element:    core.Geo,
 		Durability: 25,
 		Mult:       skillTick[c.TalentLvlSkill()],
-		FlatDmg:    0.019 * c.HPMax,
+		FlatDmg:    0.019 * c.MaxHP(),
 	}
 	snap := c.Snapshot(&aiSnap)
 	c.steleSnapshot = core.AttackEvent{
@@ -78,15 +80,17 @@ func (c *char) resonance(src, max int) func() {
 		ae := c.steleSnapshot
 
 		//check how many times to hit
-		count := c.Core.Constructs.Count()
+		count := c.Core.Constructs.Count() - c.Core.Constructs.CountByType(core.GeoConstructZhongliSkill) + 1
 		if count > max {
 			count = max
 		}
 		orb := false
 		for i := 0; i < count; i++ {
-			c.Core.Combat.QueueAttackEvent(&ae, 0)
-			if c.energyICD < c.Core.F && !orb && c.Core.Rand.Float64() < .5 {
-				orb = true
+			if count > 1 || rand.Intn(2) == 0 {
+				c.Core.Combat.QueueAttackEvent(&ae, 0)
+				if c.energyICD < c.Core.F && !orb && c.Core.Rand.Float64() < .5 {
+					orb = true
+				}
 			}
 		}
 		if orb {

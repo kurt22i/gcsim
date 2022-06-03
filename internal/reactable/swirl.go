@@ -1,10 +1,12 @@
 package reactable
 
-import "github.com/genshinsim/gcsim/pkg/core"
+import (
+	"github.com/genshinsim/gcsim/pkg/core"
+)
 
 func calcSwirlAtkDurability(consumed, src core.Durability) core.Durability {
-	if consumed < 0.5*src {
-		return 1.25*(consumed-1) + 25
+	if consumed < src {
+		return 1.25*(0.5*consumed-1) + 25
 	}
 	return 1.25*(src-1) + 25
 }
@@ -22,12 +24,19 @@ func (r *Reactable) queueSwirl(rt core.ReactionType, ele core.EleType, tag core.
 		Element:          ele,
 		IgnoreDefPercent: 1,
 	}
-	ai.FlatDmg = 0.6 * r.calcReactionDmg(ai)
+	char := r.core.Chars[charIndex]
+	em := char.Stat(core.EM)
+	ai.FlatDmg = 0.6 * r.calcReactionDmg(ai, em)
+	snap := core.Snapshot{
+		CharLvl:  char.Level(),
+		ActorEle: char.Ele(),
+	}
+	snap.Stats[core.EM] = em
 	//first attack is self no hitbox
-	r.core.Combat.QueueAttack(
+	r.core.Combat.QueueAttackWithSnap(
 		ai,
+		snap,
 		core.NewDefSingleTarget(r.self.Index(), r.self.Type()),
-		-1,
 		1,
 	)
 	//next is aoe - hydro swirls never do AoE damage, as they only spread the element
@@ -36,10 +45,10 @@ func (r *Reactable) queueSwirl(rt core.ReactionType, ele core.EleType, tag core.
 	}
 	ai.Durability = dur
 	ai.Abil = string(rt) + " (aoe)"
-	r.core.Combat.QueueAttack(
+	r.core.Combat.QueueAttackWithSnap(
 		ai,
+		snap,
 		core.NewDefCircHit(5, false, core.TargettableEnemy),
-		-1,
 		1,
 	)
 }

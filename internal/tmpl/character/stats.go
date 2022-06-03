@@ -10,13 +10,15 @@ import (
 func (t *Tmpl) Stat(s core.StatType) float64 {
 	val := t.Stats[s]
 	for _, m := range t.Mods {
-		//ignore this mod if stat type doesnt match
+		// ignore this mod if stat type doesnt match
 		if m.AffectedStat != core.NoStat && m.AffectedStat != s {
 			continue
 		}
-		amt, ok := m.Amount()
-		if ok {
-			val += amt[s]
+		// check expiry
+		if m.Expiry > t.Core.F || m.Expiry == -1 {
+			if amt, ok := m.Amount(); ok {
+				val += amt[s]
+			}
 		}
 	}
 
@@ -30,6 +32,7 @@ func (c *Tmpl) Snapshot(a *core.AttackInfo) core.Snapshot {
 		ActorEle:    c.Base.Element,
 		BaseAtk:     c.Base.Atk + c.Weapon.Atk,
 		BaseDef:     c.Base.Def,
+		BaseHP:      c.Base.HP,
 		SourceFrame: c.Core.F,
 	}
 
@@ -230,15 +233,34 @@ func (c *Tmpl) HP() float64 {
 }
 
 func (c *Tmpl) MaxHP() float64 {
-	return c.HPMax
+	hpp := c.Stats[core.HPP]
+	hp := c.Stats[core.HP]
+
+	for _, m := range c.Mods {
+		// skip all expect NoStat, HP and HPP
+		switch m.AffectedStat {
+		case core.NoStat, core.HP, core.HPP:
+		default:
+			continue
+		}
+		if m.Expiry > c.Core.F || m.Expiry == -1 {
+			if a, ok := m.Amount(); ok {
+				hpp += a[core.HPP]
+				hp += a[core.HP]
+			}
+		}
+	}
+
+	return c.Base.HP*(1+hpp) + hp
 }
 
 func (c *Tmpl) ModifyHP(amt float64) {
 	c.HPCurrent += amt
 	if c.HPCurrent < 0 {
-		c.HPCurrent = -1
+		c.HPCurrent = 1
 	}
-	if c.HPCurrent > c.HPMax {
-		c.HPCurrent = c.HPMax
+	maxhp := c.MaxHP()
+	if c.HPCurrent > maxhp {
+		c.HPCurrent = maxhp
 	}
 }
