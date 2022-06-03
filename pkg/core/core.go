@@ -9,8 +9,8 @@ import (
 const (
 	MaxStam            = 240
 	StamCDFrames       = 90
-	JumpFrames         = 33
-	DashFrames         = 24
+	JumpFrames         = 31
+	DashFrames         = 21
 	WalkFrames         = 1
 	SwapCDFrames       = 60
 	MaxTeamPlayerCount = 4
@@ -93,6 +93,7 @@ func New() *Core {
 
 	c.CharPos = make(map[CharKey]int)
 	c.Flags.Custom = make(map[string]int)
+	c.Flags.Delays.Swap = 6 //default swap delay 6
 	c.Stam = MaxStam
 	c.stamModifier = make([]stamMod, 0, 10)
 	//make a default nil writer

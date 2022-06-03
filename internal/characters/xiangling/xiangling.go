@@ -2,6 +2,7 @@ package xiangling
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/genshinsim/gcsim/internal/tmpl/character"
 	"github.com/genshinsim/gcsim/pkg/core"
@@ -176,13 +177,18 @@ func (c *char) Skill(p map[string]int) (int, int) {
 	//lasts 7.3 seconds, shoots every 100 frames
 	snap := c.Snapshot(&ai)
 	for i := 0; i < 4; i++ {
+		hit := rand.Intn(2)
 		c.AddTask(func() {
-			c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(0.5, false, core.TargettableEnemy), 10, cb)
+			if hit == 1 {
+				c.Core.Combat.QueueAttackWithSnap(ai, snap, core.NewDefCircHit(0.5, false, core.TargettableEnemy), 10, cb)
+			}
 			c.guoba.pyroWindowStart = c.Core.F
 			c.guoba.pyroWindowEnd = c.Core.F + 20
 		}, "guoba-shoot", delay+i*100-10) //10 frame window to swirl
 		//TODO: check guoba particle generation
-		c.QueueParticle("xiangling", 1, core.Pyro, delay+i*100+150)
+		if hit == 1 {
+			c.QueueParticle("xiangling", 1, core.Pyro, delay+i*100+150)
+		}
 	}
 
 	c.SetCDWithDelay(core.ActionSkill, 12*60, 13)
