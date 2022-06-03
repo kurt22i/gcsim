@@ -20,7 +20,7 @@ type Target interface {
 	Attack(*AttackEvent, LogEvent) (float64, bool)
 
 	//reaction/aura stuff
-	Tick()
+	Tick(setfreeze bool)
 	AuraContains(...EleType) bool
 	AuraType() EleType
 

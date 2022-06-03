@@ -13,12 +13,12 @@ type Reactable struct {
 	self core.Target
 	core *core.Core
 	//ec specific
-	ecSnapshot core.AttackInfo //index of owner of next ec ticks
-	ecTickSrc  int
+	ecSnapshot  core.AttackInfo //index of owner of next ec ticks
+	ecTickSrc   int
+	frzDecayCap core.Durability
 }
 
 const frzDelta core.Durability = 2.5 / (60 * 60) // 2 * 1.25
-const frzDecayCap core.Durability = 10.0 / 60.0
 
 const ZeroDur core.Durability = 0.00000000001
 
@@ -27,18 +27,8 @@ func (r *Reactable) Init(self core.Target, c *core.Core) *Reactable {
 	r.core = c
 	r.Durability = make([]core.Durability, core.ElementDelimAttachable)
 	r.DecayRate = make([]core.Durability, core.ElementDelimAttachable)
-	//count targets to set ST unfreezable
-	targets := 0
-	for _, t := range c.Targets {
-		if t.Type() == core.TargettableEnemy {
-			targets++
-		}
-	}
-	if targets <= 1 {
-		r.DecayRate[core.Frozen] = 10000.0
-	} else {
-		r.DecayRate[core.Frozen] = frzDecayCap
-	}
+	r.frzDecayCap = 10.0 / 60.0
+	r.DecayRate[core.Frozen] = r.frzDecayCap
 	r.ecTickSrc = -1
 	return r
 }
@@ -215,7 +205,12 @@ func (r *Reactable) addDurability(e core.EleType, dur core.Durability) {
 	r.core.Events.Emit(core.OnAuraDurabilityAdded, r.self, e, dur)
 }
 
-func (r *Reactable) Tick() {
+func (r *Reactable) Tick(setfreeze bool) {
+
+	if setfreeze {
+		r.frzDecayCap = 10000.0
+		r.DecayRate[core.Frozen] = r.frzDecayCap
+	}
 
 	//duability is reduced by decay * (1 + purge)
 	//where purge is 0 for anything that's not freeze
@@ -248,12 +243,12 @@ func (r *Reactable) Tick() {
 		r.Durability[core.Frozen] -= r.DecayRate[core.Frozen]
 
 		r.checkFreeze()
-	} else if r.DecayRate[core.Frozen] > frzDecayCap { //otherwise ramp down decay rate
+	} else if r.DecayRate[core.Frozen] > r.frzDecayCap { //otherwise ramp down decay rate
 		r.DecayRate[core.Frozen] -= frzDelta * 2
 
 		//cap decay
-		if r.DecayRate[core.Frozen] < frzDecayCap {
-			r.DecayRate[core.Frozen] = frzDecayCap
+		if r.DecayRate[core.Frozen] < r.frzDecayCap {
+			r.DecayRate[core.Frozen] = r.frzDecayCap
 		}
 	}
 

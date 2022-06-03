@@ -85,6 +85,8 @@ type Core struct {
 	Shields    ShieldHandler
 	Health     HealthHandler
 	Events     EventHandler
+
+	dofreezecheck bool
 }
 
 func New() *Core {
@@ -98,6 +100,8 @@ func New() *Core {
 	c.stamModifier = make([]stamMod, 0, 10)
 	//make a default nil writer
 	c.Log = &NilLogger{}
+
+	c.dofreezecheck = true
 
 	return c
 }
@@ -234,13 +238,29 @@ func (c *Core) Skip(n int) {
 func (c *Core) Tick() {
 	//increment frame count
 	c.F++
+
+	setfreeze := false
+	if c.dofreezecheck {
+		//count targets to set ST unfreezable
+		targets := 0
+		for _, t := range c.Targets {
+			if t.Type() == TargettableEnemy {
+				targets++
+			}
+		}
+		if targets <= 1 {
+			setfreeze = true
+		}
+		c.dofreezecheck = false
+	}
+
 	//tick auras
 	for _, t := range c.Targets {
 		if t == nil {
 			log.Print("unexpected nil target?")
 			log.Println(c.Targets)
 		}
-		t.Tick()
+		t.Tick(setfreeze)
 	}
 	//tick shields
 	c.Shields.Tick()
