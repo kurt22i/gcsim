@@ -1,3 +1,3 @@
 # Overview
 
-tcsim is a version of gcsim focused primarily on theorycrafting.
+tcsim is a variant of gcsim focused primarily on theorycrafting.
